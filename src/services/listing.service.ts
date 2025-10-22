@@ -1,16 +1,9 @@
-import type { Listing } from '../core/types';
+import type { Listing, Profile } from '../core/types';
 import { ValidationError } from '../core/errors';
 import { listingsRepo } from '../notion/listings.repo';
 import { profileService } from './profile.service';
 
 const MAX_LENGTH = 500;
-
-const clean = (value: string, field: string, max = MAX_LENGTH) => {
-  const trimmed = value?.trim();
-  if (!trimmed) throw new ValidationError(`${field} не может быть пустым`);
-  if (trimmed.length > max) throw new ValidationError(`${field} слишком длинное (максимум ${max} символов)`);
-  return trimmed;
-};
 
 const pad = (value: number) => value.toString().padStart(2, '0');
 
@@ -203,37 +196,44 @@ export const normalizeDateRange = (value: string) => {
   return `${formattedStart} - ${formattedEnd}`;
 };
 
+type ListingDraftInput = {
+  apartmentDescription: string;
+  apartmentPhotoId: string;
+  dates: string;
+  conditions: string;
+  preferredDestinations: string;
+};
+
+const clean = (value: string, field: string, max = MAX_LENGTH) => {
+  const trimmed = value?.trim();
+  if (!trimmed) throw new ValidationError(`${field} не может быть пустым`);
+  if (trimmed.length > max) throw new ValidationError(`${field} слишком длинное (максимум ${max} символов)`);
+  return trimmed;
+};
+
+const buildDraft = (profile: Profile & { id: string }, ownerTgId: number, input: ListingDraftInput): Listing => ({
+  ownerTgId,
+  profileId: profile.id,
+  name: profile.name,
+  city: profile.city,
+  country: profile.country,
+  catPhotoId: profile.catPhotoId,
+  apartmentDescription: clean(input.apartmentDescription, 'Описание квартиры'),
+  apartmentPhotoId: clean(input.apartmentPhotoId, 'Фото квартиры', 512),
+  dates: normalizeDateRange(input.dates),
+  conditions: clean(input.conditions, 'Условия (взаимный обмен или оплата)'),
+  preferredDestinations: clean(input.preferredDestinations, 'Желаемые направления')
+});
+
 export const listingService = {
-  async create(
-    ownerTgId: number,
-    input: {
-      apartmentDescription: string;
-      apartmentPhotoId: string;
-      dates: string;
-      conditions: string;
-      preferredDestinations: string;
-    }
-  ) {
+  async buildDraft(ownerTgId: number, input: ListingDraftInput) {
     const profile = await profileService.ensure(ownerTgId);
+    return buildDraft(profile, ownerTgId, input);
+  },
 
-    const listing: Listing = {
-      ownerTgId,
-      profileId: profile.id,
-      name: profile.name,
-      city: profile.city,
-      country: profile.country,
-      catPhotoId: profile.catPhotoId,
-      apartmentDescription: clean(input.apartmentDescription, 'Описание квартиры'),
-      apartmentPhotoId: clean(input.apartmentPhotoId, 'Фото квартиры', 512),
-      dates: normalizeDateRange(input.dates),
-      conditions: clean(input.conditions, 'Условия (взаимный обмен или оплата)'),
-      preferredDestinations: clean(input.preferredDestinations, 'Желаемые направления'),
-      channelMessageId: undefined
-    };
-
-    const listingId = await listingsRepo.create(listing);
-    const stored = await listingsRepo.findById(listingId);
-    return { listingId, listing: stored ?? listing };
+  async persist(draft: Listing) {
+    const stored = await listingsRepo.create(draft);
+    return { listingId: stored.id, listing: stored };
   },
 
   async updateChannelMessage(listingId: string, messageId: number) {

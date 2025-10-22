@@ -1,6 +1,7 @@
 import { notion, DB, handleNotionError } from './notionClient';
 import type { Profile } from '../core/types';
 import { log } from '../core/logger';
+import { DependencyError } from '../core/errors';
 
 const text = (value?: string | null) => {
   if (!value) return [];
@@ -11,7 +12,6 @@ const parseRichText = (prop: any) => prop?.rich_text?.[0]?.plain_text ?? '';
 const parseNumber = (prop: any) => (typeof prop?.number === 'number' ? prop.number : undefined);
 
 const profilesRepoLog = log.withContext({ scope: 'profilesRepo' });
-const missingPropertyWarnings = new Set<string>();
 
 const REQUIRED_PROPERTIES: Record<string, { rich_text: Record<string, never> }> = {
   intro: { rich_text: {} },
@@ -41,15 +41,15 @@ const ensureProfilesSchema = async (): Promise<Set<string>> => {
         missingEntries.forEach(([key]) => available.add(key));
         profilesRepoLog.info('Extended profiles database schema', { added: missingEntries.map(([key]) => key) });
       } catch (error) {
-        profilesRepoLog.warn('Failed to extend profiles database schema', error);
+        throw new DependencyError('Profiles database is missing required properties. Please add intro & catName.', error);
       }
     }
 
     cachedProfileProperties = available;
     return available;
   } catch (error) {
-    profilesRepoLog.warn('Failed to retrieve profiles database schema', error);
-    return new Set<string>();
+    profilesRepoLog.error('Failed to retrieve profiles database schema', error);
+    throw new DependencyError('Failed to read profiles database schema', error);
   }
 };
 
@@ -80,23 +80,15 @@ const buildProperties = (profile: Profile, availableProps: Set<string>) => {
     catPhotoId: { rich_text: text(profile.catPhotoId) }
   };
 
-  if (availableProps.has('intro')) {
-    props.intro = { rich_text: text(profile.intro) };
-  } else {
-    if (!missingPropertyWarnings.has('intro')) {
-      profilesRepoLog.warn('Profiles database missing intro property; skipping update');
-      missingPropertyWarnings.add('intro');
-    }
+  if (!availableProps.has('intro')) {
+    throw new DependencyError('Profiles database missing intro property', { profile });
   }
+  props.intro = { rich_text: text(profile.intro) };
 
-  if (availableProps.has('catName')) {
-    props.catName = { rich_text: text(profile.catName) };
-  } else {
-    if (!missingPropertyWarnings.has('catName')) {
-      profilesRepoLog.warn('Profiles database missing catName property; skipping update');
-      missingPropertyWarnings.add('catName');
-    }
+  if (!availableProps.has('catName')) {
+    throw new DependencyError('Profiles database missing catName property', { profile });
   }
+  props.catName = { rich_text: text(profile.catName) };
 
   if (typeof profile.channelMessageId === 'number') {
     props.channelMessageId = { number: profile.channelMessageId };
@@ -112,14 +104,14 @@ export const profilesRepo = {
     const properties = buildProperties(profile, availableProps);
     try {
       if (existing?.id) {
-        await notion.pages.update({ page_id: existing.id, properties });
-        return existing.id;
+        const page = await notion.pages.update({ page_id: existing.id, properties } as any);
+        return toProfile(page);
       }
       const page = await notion.pages.create({
         parent: { database_id: DB.profiles },
         properties
       } as any);
-      return (page as any).id as string;
+      return toProfile(page);
     } catch (error) {
       return handleNotionError(error, { tgId: profile.tgId, op: 'profiles.upsert' });
     }

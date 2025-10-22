@@ -45,13 +45,13 @@ const buildProperties = (listing: Listing) => ({
 });
 
 export const listingsRepo = {
-  async create(listing: Listing) {
+  async create(listing: Listing): Promise<Listing & { id: string }> {
     try {
       const page = await notion.pages.create({
         parent: { database_id: DB.listings },
         properties: buildProperties(listing)
       } as any);
-      return (page as any).id as string;
+      return toListing(page);
     } catch (error) {
       return handleNotionError(error, { tgId: listing.ownerTgId, op: 'listings.create' });
     }
@@ -68,7 +68,7 @@ export const listingsRepo = {
     }
   },
 
-  async findById(id: string) {
+  async findById(id: string): Promise<(Listing & { id: string }) | null> {
     try {
       const page: any = await notion.pages.retrieve({ page_id: id } as any);
       return toListing(page);

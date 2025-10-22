@@ -33,8 +33,7 @@ export const profileService = {
     const catPhotoId = clean(input.catPhotoId, 'Фото кота', 512);
 
     const profile: Profile = { tgId: input.tgId, name, city, country, intro, catName, catPhotoId };
-    await profilesRepo.upsert(profile);
-    const stored = await profilesRepo.findByTgId(input.tgId);
+    const stored = await profilesRepo.upsert(profile);
     if (!stored) throw new Error('Не удалось сохранить анкету');
     return { ...stored, intro, catName };
   },

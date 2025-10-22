@@ -5,6 +5,7 @@ import { publishService } from '../../services/publish.service';
 import { cfg } from '../../core/config';
 import { kb } from '../keyboards';
 import { templates } from '../templates';
+import type { Listing } from '../../core/types';
 
 interface ListingState extends Scenes.WizardSessionData {
   location?: { city: string; country: string; area?: string };
@@ -15,6 +16,7 @@ interface ListingState extends Scenes.WizardSessionData {
   conditions?: string;
   preferredDestinations?: string;
   listingId?: string;
+  listingDraft?: Listing;
 }
 
 type ListingCtx = Scenes.WizardContext<ListingState>;
@@ -254,20 +256,20 @@ export const newListingScene = new Scenes.WizardScene<ListingCtx>(
       if (state.pets) descriptionParts.push(`Коты: ${state.pets}`);
       const apartmentDescription = descriptionParts.filter(Boolean).join('\n');
 
-      const { listingId, listing } = await listingService.create(tgId, {
+      const draft = await listingService.buildDraft(tgId, {
         apartmentDescription,
         apartmentPhotoId: state.apartmentPhotoId ?? '',
         dates: state.dates ?? '',
         conditions: state.conditions ?? '',
         preferredDestinations: state.preferredDestinations ?? ''
       });
-      state.listingId = listingId;
+      state.listingDraft = draft;
 
       await ctx.reply('Вот как будет выглядеть объявление:', {
         parse_mode: 'MarkdownV2',
         link_preview_options: { is_disabled: true }
       });
-      await ctx.reply(templates.listingCard(profile, listing), {
+      await ctx.reply(templates.listingCard(profile, draft), {
         parse_mode: 'MarkdownV2',
         link_preview_options: { is_disabled: true }
       });
@@ -296,22 +298,23 @@ export const newListingScene = new Scenes.WizardScene<ListingCtx>(
     }
 
     const tgId = ctx.from?.id;
-    const state = ctx.wizard.state as ListingState;
-    const listingId = state.listingId;
-    if (!tgId || !listingId) {
+    if (!tgId) {
       await ctx.reply('Не удалось найти данные объявления.', kb.main(true));
       return ctx.scene.leave();
     }
 
-    const listingRecord = await listingService.getById(listingId);
     const profile = await profileService.ensure(tgId);
-    if (!listingRecord) {
-      await ctx.reply('Объявление не найдено.', kb.main(true));
+    const state = ctx.wizard.state as ListingState;
+    const draft = state.listingDraft;
+    if (!draft) {
+      await ctx.reply('Черновик объявления не найден. Попробуй создать объявление ещё раз.', kb.main(true));
       return ctx.scene.leave();
     }
 
-    const caption = templates.listingCard(profile, listingRecord);
-    const messageId = await publishService.publishListing(ctx.telegram, listingRecord, caption);
+    const { listingId, listing } = await listingService.persist(draft);
+    state.listingId = listingId;
+    const caption = templates.listingCard(profile, listing);
+    const messageId = await publishService.publishListing(ctx.telegram, listing, caption);
     await listingService.updateChannelMessage(listingId, messageId);
     await ctx.reply('Объявление опубликовано в канале!', kb.main(true));
     await ctx.reply(`Присоединяйся: ${cfg.channelInviteLink}`);
