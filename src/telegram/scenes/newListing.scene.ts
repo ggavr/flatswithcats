@@ -4,7 +4,7 @@ import { profileService } from '../../services/profile.service';
 import { publishService } from '../../services/publish.service';
 import { cfg } from '../../core/config';
 import { kb } from '../keyboards';
-import { templates } from '../templates';
+import { templates } from '../../domain/templates';
 import type { Listing } from '../../core/types';
 
 interface ListingState extends Scenes.WizardSessionData {

@@ -166,13 +166,42 @@ const extractDateTokens = (value: string) => {
   return matches;
 };
 
+const inferRangeTokens = (value: string) => {
+  const normalized = value.replace(/\s*[-–—]\s*/g, '-');
+
+  const textual = normalized.match(
+    /^(\d{1,2})-(\d{1,2})\s+([a-zа-яё]+)(?:\s+(\d{2,4}))?$/i
+  );
+  if (textual) {
+    const [, startDay, endDay, monthRaw, yearRaw] = textual;
+    const suffix = yearRaw ? ` ${yearRaw}` : '';
+    return [`${startDay} ${monthRaw}${suffix}`, `${endDay} ${monthRaw}${suffix}`];
+  }
+
+  const numeric = normalized.match(
+    /^(\d{1,2})-(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?$/
+  );
+  if (numeric) {
+    const [, startDay, endDay, monthRaw, yearRaw] = numeric;
+    const month = monthRaw;
+    const suffix = yearRaw ? `.${yearRaw}` : '';
+    return [`${startDay}.${month}${suffix}`, `${endDay}.${month}${suffix}`];
+  }
+
+  return [];
+};
+
 export const normalizeDateRange = (value: string) => {
   const input = value?.trim();
   if (!input) {
     throw new ValidationError('Укажи даты поиска опекуна.');
   }
   const cleaned = input.replace(/\s+/g, ' ');
-  const tokens = extractDateTokens(cleaned);
+  const cleanedWithDashes = cleaned.replace(/[–—]/g, '-');
+  let tokens = extractDateTokens(cleanedWithDashes);
+  if (tokens.length < 2) {
+    tokens = inferRangeTokens(cleanedWithDashes);
+  }
   if (tokens.length < 2) {
     throw new ValidationError('Не удалось распознать диапазон дат. Укажи начало и конец периода.');
   }
@@ -199,6 +228,7 @@ export const normalizeDateRange = (value: string) => {
 type ListingDraftInput = {
   apartmentDescription: string;
   apartmentPhotoId: string;
+  apartmentPhotoUrl?: string;
   dates: string;
   conditions: string;
   preferredDestinations: string;
@@ -211,19 +241,30 @@ const clean = (value: string, field: string, max = MAX_LENGTH) => {
   return trimmed;
 };
 
-const buildDraft = (profile: Profile & { id: string }, ownerTgId: number, input: ListingDraftInput): Listing => ({
-  ownerTgId,
-  profileId: profile.id,
-  name: profile.name,
-  city: profile.city,
-  country: profile.country,
-  catPhotoId: profile.catPhotoId,
-  apartmentDescription: clean(input.apartmentDescription, 'Описание квартиры'),
-  apartmentPhotoId: clean(input.apartmentPhotoId, 'Фото квартиры', 512),
-  dates: normalizeDateRange(input.dates),
-  conditions: clean(input.conditions, 'Условия (взаимный обмен или оплата)'),
-  preferredDestinations: clean(input.preferredDestinations, 'Желаемые направления')
-});
+const sanitizeUrl = (value?: string | null) => value?.trim() ?? '';
+
+const buildDraft = (profile: Profile & { id: string }, ownerTgId: number, input: ListingDraftInput): Listing => {
+  const apartmentPhotoUrl = sanitizeUrl(input.apartmentPhotoUrl);
+  if (apartmentPhotoUrl && apartmentPhotoUrl.length > 2048) {
+    throw new ValidationError('Ссылка на фото квартиры слишком длинная (максимум 2048 символов)');
+  }
+
+  return {
+    ownerTgId,
+    profileId: profile.id,
+    name: profile.name,
+    city: profile.city,
+    country: profile.country,
+    catPhotoId: profile.catPhotoId,
+    catPhotoUrl: profile.catPhotoUrl,
+    apartmentDescription: clean(input.apartmentDescription, 'Описание квартиры'),
+    apartmentPhotoId: clean(input.apartmentPhotoId, 'Фото квартиры', 512),
+    apartmentPhotoUrl,
+    dates: normalizeDateRange(input.dates),
+    conditions: clean(input.conditions, 'Условия (взаимный обмен или оплата)'),
+    preferredDestinations: clean(input.preferredDestinations, 'Желаемые направления')
+  };
+};
 
 export const listingService = {
   async buildDraft(ownerTgId: number, input: ListingDraftInput) {

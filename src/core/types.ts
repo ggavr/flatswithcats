@@ -1,4 +1,5 @@
 export interface Profile {
+  id?: string;
   tgId: number;
   name: string;
   city: string;
@@ -6,6 +7,7 @@ export interface Profile {
   intro: string;
   catName: string;
   catPhotoId: string;
+  catPhotoUrl?: string;
   channelMessageId?: number;
 }
 
@@ -17,8 +19,10 @@ export interface Listing {
   city: string;
   country: string;
   catPhotoId: string;
+  catPhotoUrl?: string;
   apartmentDescription: string;
   apartmentPhotoId: string;
+  apartmentPhotoUrl?: string;
   dates: string;
   conditions: string;
   preferredDestinations: string;

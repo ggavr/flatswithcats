@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: cats-flats-api
+    env: node
+    plan: starter
+    buildCommand: |
+      npm install
+      npm --prefix apps/web install
+      npm run build
+    startCommand: |
+      API_PORT=$PORT npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: MEDIA_STORAGE_ROOT
+        value: /var/uploads
+      - key: MEDIA_PUBLIC_PATH
+        value: /uploads
+      - key: MEDIA_BASE_URL
+        value: https://cats-flats-api.onrender.com/uploads
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+    disk:
+      name: uploads
+      mountPath: /var/uploads
+      sizeGB: 10
+
+  - type: web
+    name: cats-flats-web
+    env: node
+    plan: starter
+    buildCommand: |
+      npm install
+      npm --prefix apps/web install
+      npm run build:web
+    startCommand: |
+      NEXT_PUBLIC_API_BASE_URL=https://cats-flats-api.onrender.com npm run start:web
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 18

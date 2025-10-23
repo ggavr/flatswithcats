@@ -15,7 +15,8 @@ const profilesRepoLog = log.withContext({ scope: 'profilesRepo' });
 
 const REQUIRED_PROPERTIES: Record<string, { rich_text: Record<string, never> }> = {
   intro: { rich_text: {} },
-  catName: { rich_text: {} }
+  catName: { rich_text: {} },
+  catPhotoUrl: { rich_text: {} }
 };
 
 let cachedProfileProperties: Set<string> | null = null;
@@ -41,7 +42,7 @@ const ensureProfilesSchema = async (): Promise<Set<string>> => {
         missingEntries.forEach(([key]) => available.add(key));
         profilesRepoLog.info('Extended profiles database schema', { added: missingEntries.map(([key]) => key) });
       } catch (error) {
-        throw new DependencyError('Profiles database is missing required properties. Please add intro & catName.', error);
+        throw new DependencyError('Profiles database is missing required properties. Please add intro, catName и catPhotoUrl.', error);
       }
     }
 
@@ -66,6 +67,7 @@ const toProfile = (page: any): (Profile & { id: string }) => {
     intro: parseRichText(props.intro),
     catName: parseRichText(props.catName),
     catPhotoId: parseRichText(props.catPhotoId),
+    catPhotoUrl: parseRichText(props.catPhotoUrl) || undefined,
     channelMessageId: parseNumber(props.channelMessageId)
   };
 };
@@ -89,6 +91,15 @@ const buildProperties = (profile: Profile, availableProps: Set<string>) => {
     throw new DependencyError('Profiles database missing catName property', { profile });
   }
   props.catName = { rich_text: text(profile.catName) };
+
+  if (!availableProps.has('catPhotoUrl')) {
+    throw new DependencyError('Profiles database missing catPhotoUrl property', { profile });
+  }
+  if (profile.catPhotoUrl) {
+    props.catPhotoUrl = { rich_text: text(profile.catPhotoUrl) };
+  } else {
+    props.catPhotoUrl = { rich_text: [] };
+  }
 
   if (typeof profile.channelMessageId === 'number') {
     props.channelMessageId = { number: profile.channelMessageId };

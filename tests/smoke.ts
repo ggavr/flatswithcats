@@ -18,25 +18,28 @@ async function main() {
 
   profilesRepo.findByTgId = async (tgId: number) => memoryUsers.get(tgId) ?? null;
   profilesRepo.upsert = async (profile: any) => {
-    memoryUsers.set(profile.tgId, { ...profile, id: `profile-${profile.tgId}` });
-    return `profile-${profile.tgId}`;
+    const stored = { ...profile, id: `profile-${profile.tgId}` };
+    memoryUsers.set(profile.tgId, stored);
+    return stored;
   };
   profilesRepo.updateChannelMessage = async () => undefined;
 
   listingsRepo.create = async (listing: any) => {
     const id = `listing-${memoryListings.size + 1}`;
-    memoryListings.set(id, { ...listing, id });
-    return id;
+    const stored = { ...listing, id };
+    memoryListings.set(id, stored);
+    return stored;
   };
   listingsRepo.updateChannelMessage = async (id: string, messageId: number) => {
     const current = memoryListings.get(id);
     assert.ok(current, `Listing ${id} must exist`);
     memoryListings.set(id, { ...current, channelMessageId: messageId });
   };
-  listingsRepo.findById = async (id: string) => memoryListings.get(id);
+  listingsRepo.findById = async (id: string) => memoryListings.get(id) ?? null;
 
   const { profileService } = await import('../src/services/profile.service');
-  const { listingService } = await import('../src/services/listing.service');
+  const { listingService, normalizeDateRange } = await import('../src/services/listing.service');
+  const { templates } = await import('../src/domain/templates');
 
   const storedProfile = await profileService.save({
     tgId: 1,
@@ -53,21 +56,32 @@ async function main() {
   assert.equal(storedProfile.intro, 'Люблю котов и путешествия.');
   assert.equal(storedProfile.catName, 'Мурка');
 
-  const { listingId, listing } = await listingService.create(1, {
+  const draft = await listingService.buildDraft(1, {
     apartmentDescription: ' Просторная квартира ',
     apartmentPhotoId: 'apt_photo',
+    apartmentPhotoUrl: '',
     dates: '01/06/25-30/06/25',
     conditions: '500 € + корм',
     preferredDestinations: 'Берлин'
   });
+  const { listingId, listing } = await listingService.persist(draft);
 
   assert.ok(listingId);
-  assert.equal(listing.dates, '01/06/25 - 30/06/25');
+  assert.equal(listing.dates, '01.06.2025 - 30.06.2025');
   assert.equal(listing.city, storedProfile.city);
   assert.equal(listing.country, storedProfile.country);
   assert.equal(memoryListings.get(listingId)?.apartmentPhotoId, 'apt_photo');
   assert.equal(memoryListings.get(listingId)?.preferredDestinations, 'Берлин');
   assert.equal(memoryListings.get(listingId)?.conditions, '500 € + корм');
+
+  const normalizedInlineRange = normalizeDateRange('1-15 июля 2024');
+  assert.equal(normalizedInlineRange, '01.07.2024 - 15.07.2024');
+
+  const previewWithBackslash = templates.profilePreview({
+    ...storedProfile,
+    intro: 'Путь: C:\\Users\\Alice'
+  });
+  assert.ok(previewWithBackslash.includes('C:\\\\Users'), 'Backslashes must be escaped in Markdown');
 
   console.log('Smoke tests passed');
 }

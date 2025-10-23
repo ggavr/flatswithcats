@@ -1,7 +1,7 @@
 import { Telegraf, Scenes } from 'telegraf';
 import { profileService } from '../services/profile.service';
 import { kb } from './keyboards';
-import { templates } from './templates';
+import { templates } from '../domain/templates';
 
 type SceneContext = Scenes.SceneContext;
 

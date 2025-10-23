@@ -1,6 +1,9 @@
 import type { Listing, Profile } from '../core/types';
 
-const escape = (value: string) => value.replace(/[_*\[\]()~`>#+=|{}.!-]/g, (match) => `\\${match}`);
+const escape = (value: string) =>
+  value
+    .replace(/\\/g, '\\\\')
+    .replace(/[_*\[\]()~`>#+=|{}.!-]/g, (match) => `\\${match}`);
 
 export const templates = {
   profilePreview: (profile: Profile) => {

@@ -12,11 +12,18 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier --check \"src/**/*.{ts,tsx,js,json}\"",
     "format:fix": "prettier --write \"src/**/*.{ts,tsx,js,json}\"",
-    "test": "ts-node --transpile-only tests/smoke.ts"
+    "test": "ts-node --transpile-only tests/smoke.ts",
+    "dev:web": "npm --prefix apps/web run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "start:web": "npm --prefix apps/web run start"
   },
   "dependencies": {
+    "@fastify/cors": "^8.4.2",
+    "@fastify/multipart": "^7.7.3",
+    "@fastify/static": "^7.0.3",
     "@notionhq/client": "^2.3.0",
     "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {

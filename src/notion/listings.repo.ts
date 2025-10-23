@@ -1,5 +1,7 @@
 import { notion, DB, handleNotionError } from './notionClient';
 import type { Listing } from '../core/types';
+import { DependencyError } from '../core/errors';
+import { log } from '../core/logger';
 
 const text = (value?: string | null) => {
   if (!value) return [];
@@ -9,6 +11,68 @@ const text = (value?: string | null) => {
 const parseRichText = (prop: any) => prop?.rich_text?.[0]?.plain_text ?? '';
 const parseNumber = (prop: any) => (typeof prop?.number === 'number' ? prop.number : undefined);
 
+const listingsRepoLog = log.withContext({ scope: 'listingsRepo' });
+
+const REQUIRED_RICH_TEXT_PROPERTIES: Record<string, { rich_text: Record<string, never> }> = {
+  profileId: { rich_text: {} },
+  name: { rich_text: {} },
+  city: { rich_text: {} },
+  country: { rich_text: {} },
+  catPhotoId: { rich_text: {} },
+  catPhotoUrl: { rich_text: {} },
+  apartmentDescription: { rich_text: {} },
+  apartmentPhotoIds: { rich_text: {} },
+  apartmentPhotoUrl: { rich_text: {} },
+  conditions: { rich_text: {} },
+  dates: { rich_text: {} },
+  preferredDestinations: { rich_text: {} }
+};
+
+const REQUIRED_NUMBER_PROPERTIES = ['tgId', 'channelMessageId'];
+
+let cachedListingProperties: Set<string> | null = null;
+
+const ensureListingsSchema = async (): Promise<Set<string>> => {
+  if (cachedListingProperties) return cachedListingProperties;
+  try {
+    const db = await notion.databases.retrieve({ database_id: DB.listings });
+    const available = new Set<string>(Object.keys(db.properties ?? {}));
+    const missingRichText = Object.entries(REQUIRED_RICH_TEXT_PROPERTIES).filter(([key]) => !available.has(key));
+    const missingNumbers = REQUIRED_NUMBER_PROPERTIES.filter((key) => !available.has(key));
+
+    if (missingNumbers.length) {
+      throw new DependencyError('Listings database missing required number properties.', { missingNumbers });
+    }
+
+    if (missingRichText.length) {
+      const payload = missingRichText.reduce<Record<string, { rich_text: Record<string, never> }>>(
+        (acc, [key, schema]) => {
+          acc[key] = schema;
+          return acc;
+        },
+        {}
+      );
+      try {
+        await notion.databases.update({ database_id: DB.listings, properties: payload });
+        missingRichText.forEach(([key]) => available.add(key));
+        listingsRepoLog.info('Extended listings database schema', {
+          added: missingRichText.map(([key]) => key)
+        });
+      } catch (error) {
+        throw new DependencyError(
+          'Listings database missing required rich_text properties (profileId, name, city, country, catPhotoId, catPhotoUrl, apartmentDescription, apartmentPhotoIds, apartmentPhotoUrl, conditions, dates, preferredDestinations).',
+          error
+        );
+      }
+    }
+    cachedListingProperties = available;
+    return available;
+  } catch (error) {
+    listingsRepoLog.error('Failed to retrieve listings database schema', error);
+    throw new DependencyError('Failed to read listings database schema', error);
+  }
+};
+
 const toListing = (page: any): Listing & { id: string } => {
   const props = page?.properties ?? {};
   return {
@@ -17,13 +81,15 @@ const toListing = (page: any): Listing & { id: string } => {
     profileId: parseRichText(props.profileId),
     name: parseRichText(props.name),
     city: parseRichText(props.city),
-  country: parseRichText(props.country),
-  catPhotoId: parseRichText(props.catPhotoId),
-  apartmentDescription: parseRichText(props.apartmentDescription),
-  apartmentPhotoId: parseRichText(props.apartmentPhotoIds),
-  conditions: parseRichText(props.conditions),
-  dates: parseRichText(props.dates),
-  preferredDestinations: parseRichText(props.preferredDestinations),
+    country: parseRichText(props.country),
+    catPhotoId: parseRichText(props.catPhotoId),
+    catPhotoUrl: parseRichText(props.catPhotoUrl) || undefined,
+    apartmentDescription: parseRichText(props.apartmentDescription),
+    apartmentPhotoId: parseRichText(props.apartmentPhotoIds),
+    apartmentPhotoUrl: parseRichText(props.apartmentPhotoUrl) || undefined,
+    conditions: parseRichText(props.conditions),
+    dates: parseRichText(props.dates),
+    preferredDestinations: parseRichText(props.preferredDestinations),
     channelMessageId: parseNumber(props.channelMessageId)
   };
 };
@@ -36,8 +102,10 @@ const buildProperties = (listing: Listing) => ({
   city: { rich_text: text(listing.city) },
   country: { rich_text: text(listing.country) },
   catPhotoId: { rich_text: text(listing.catPhotoId) },
+  catPhotoUrl: { rich_text: text(listing.catPhotoUrl) },
   apartmentDescription: { rich_text: text(listing.apartmentDescription) },
   apartmentPhotoIds: { rich_text: text(listing.apartmentPhotoId) },
+  apartmentPhotoUrl: { rich_text: text(listing.apartmentPhotoUrl) },
   conditions: { rich_text: text(listing.conditions) },
   dates: { rich_text: text(listing.dates) },
   preferredDestinations: { rich_text: text(listing.preferredDestinations) },
@@ -47,6 +115,7 @@ const buildProperties = (listing: Listing) => ({
 export const listingsRepo = {
   async create(listing: Listing): Promise<Listing & { id: string }> {
     try {
+      await ensureListingsSchema();
       const page = await notion.pages.create({
         parent: { database_id: DB.listings },
         properties: buildProperties(listing)

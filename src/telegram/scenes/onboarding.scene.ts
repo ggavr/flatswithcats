@@ -3,7 +3,7 @@ import { profileService } from '../../services/profile.service';
 import { publishService } from '../../services/publish.service';
 import { cfg } from '../../core/config';
 import { kb } from '../keyboards';
-import { templates } from '../templates';
+import { templates } from '../../domain/templates';
 
 interface RegistrationState extends Scenes.WizardSessionData {
   name?: string;

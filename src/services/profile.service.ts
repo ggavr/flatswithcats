@@ -25,17 +25,22 @@ export const profileService = {
     intro: string;
     catName: string;
     catPhotoId: string;
+    catPhotoUrl?: string;
   }): Promise<Profile & { id: string }> {
     const name = clean(input.name, 'Имя', 120);
     const { city, country } = normalizeLocation(input.location);
     const intro = clean(input.intro, 'Интро', 600);
     const catName = clean(input.catName, 'Имя кота', 100);
     const catPhotoId = clean(input.catPhotoId, 'Фото кота', 512);
+    const catPhotoUrl = input.catPhotoUrl?.trim() ?? '';
+    if (catPhotoUrl && catPhotoUrl.length > 2048) {
+      throw new ValidationError('Ссылка на фото кота слишком длинная (максимум 2048 символов)');
+    }
 
-    const profile: Profile = { tgId: input.tgId, name, city, country, intro, catName, catPhotoId };
+    const profile: Profile = { tgId: input.tgId, name, city, country, intro, catName, catPhotoId, catPhotoUrl };
     const stored = await profilesRepo.upsert(profile);
     if (!stored) throw new Error('Не удалось сохранить анкету');
-    return { ...stored, intro, catName };
+    return { ...stored, intro, catName, catPhotoUrl: stored.catPhotoUrl ?? catPhotoUrl };
   },
 
   async get(tgId: number) {
