@@ -2,7 +2,7 @@
 
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '@lib/api';
+import { api, ApiError } from '@lib/api';
 import { getTelegramInitData, isTelegramEnvironment, prepareTelegramWebApp } from '@lib/telegram';
 import type { ListingDraftPayload, SaveProfilePayload } from '@lib/types';
 import { ProfileForm, type ProfileFormValue } from '../../components/profile/ProfileForm';
@@ -52,6 +52,7 @@ const buildListingPayload = (form: ListingFormState): ListingDraftPayload => ({
 
 export default function TelegramMiniAppPage() {
   const [initData, setInitData] = useState<string | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -69,54 +70,74 @@ export default function TelegramMiniAppPage() {
   const [listingLoading, setListingLoading] = useState(false);
   const [apartmentPhotoUploading, setApartmentPhotoUploading] = useState(false);
 
+  const handleApiError = (reason: unknown, fallback: string) => {
+    if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
+      setSessionReady(false);
+      setError('Сессия Telegram устарела. Закрой и заново открой мини‑эпп через кнопки бота.');
+      return;
+    }
+    const message = reason instanceof Error ? reason.message : fallback;
+    setError(message);
+  };
+
   useEffect(() => {
     let retryTimeout: number | undefined;
+    let cancelled = false;
 
-    const bootstrap = (init: string) => {
+    const bootstrap = async (init: string) => {
+      api.auth.reset();
+      setSessionReady(false);
       setInitData(init);
-      api
-        .fetchProfile(init)
-        .then(({ profile, preview, profileCompleted }) => {
-          if (profile) {
-            setProfileForm({
-              name: profile.name,
-              catName: profile.catName,
-              intro: profile.intro,
-              catPhotoId: profile.catPhotoId,
-              catPhotoUrl: profile.catPhotoUrl ?? ''
-            });
-            setListingForm((prev) => ({
-              ...prev,
-              city: profile.city ?? prev.city,
-              country: profile.country ?? prev.country
-            }));
-            setProfilePreview(preview ?? null);
-          } else {
-            setProfileForm(initialProfileForm);
-            setProfilePreview(null);
-          }
-          setProfileCompleted(profileCompleted);
-        })
-        .catch((reason) => {
-          const message = reason instanceof Error ? reason.message : 'Не удалось загрузить анкету.';
-          setError(message);
-        })
-        .finally(() => setInitializing(false));
+      setError(null);
+      setStatus(null);
+      setChannelInviteLink(null);
+      try {
+        const { profile, preview, profileCompleted } = await api.fetchProfile({ initData: init });
+        if (cancelled) return;
+        if (profile) {
+          setProfileForm({
+            name: profile.name,
+            catName: profile.catName,
+            intro: profile.intro,
+            catPhotoId: profile.catPhotoId,
+            catPhotoUrl: profile.catPhotoUrl ?? ''
+          });
+          setListingForm((prev) => ({
+            ...prev,
+            city: profile.city ?? prev.city,
+            country: profile.country ?? prev.country
+          }));
+          setProfilePreview(preview ?? null);
+        } else {
+          setProfileForm(initialProfileForm);
+          setProfilePreview(null);
+        }
+        setProfileCompleted(profileCompleted);
+        setSessionReady(true);
+        setInitData(null);
+      } catch (reason) {
+        if (cancelled) return;
+        handleApiError(reason, 'Не удалось загрузить анкету.');
+      } finally {
+        if (!cancelled) {
+          setInitializing(false);
+        }
+      }
     };
 
     const attemptInit = () => {
       prepareTelegramWebApp();
       const data = getTelegramInitData();
       if (data) {
-        bootstrap(data);
+        void bootstrap(data);
         return;
       }
       if (isTelegramEnvironment()) {
         retryTimeout = window.setTimeout(() => {
           const retryData = getTelegramInitData();
           if (retryData) {
-            bootstrap(retryData);
-          } else {
+            void bootstrap(retryData);
+          } else if (!cancelled) {
             setError('Не удалось получить initData от Telegram. Попробуйте перезапустить мини‑эпп.');
             setInitializing(false);
           }
@@ -130,13 +151,14 @@ export default function TelegramMiniAppPage() {
     attemptInit();
 
     return () => {
+      cancelled = true;
       if (retryTimeout) window.clearTimeout(retryTimeout);
     };
   }, []);
 
   const profileBusy = initializing || profileLoading || profilePublishing || catPhotoUploading;
   const listingBusy = initializing || listingLoading || apartmentPhotoUploading;
-  const listingDisabled = listingBusy || !profileCompleted || !initData;
+  const listingDisabled = listingBusy || !profileCompleted || !sessionReady;
 
   const helperText = useMemo(() => {
     if (initializing) return 'Загружаем данные…';
@@ -156,14 +178,14 @@ export default function TelegramMiniAppPage() {
   };
 
   const uploadPhoto = async (file: File, target: 'profile' | 'listing') => {
-    if (!initData) return;
+    if (!sessionReady) return;
     const setUploading = target === 'profile' ? setCatPhotoUploading : setApartmentPhotoUploading;
     setUploading(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
     try {
-      const { fileId, url } = await api.uploadPhoto(initData, file);
+      const { fileId, url } = await api.uploadPhoto(file);
       if (target === 'profile') {
         setProfileForm((prev) => ({ ...prev, catPhotoId: fileId, catPhotoUrl: url }));
         setStatus('Фото кота загружено.');
@@ -172,8 +194,7 @@ export default function TelegramMiniAppPage() {
         setStatus('Фото квартиры загружено.');
       }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Не удалось загрузить фото.';
-      setError(message);
+      handleApiError(reason, 'Не удалось загрузить фото.');
     } finally {
       setUploading(false);
     }
@@ -181,13 +202,13 @@ export default function TelegramMiniAppPage() {
 
   const submitProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!initData) return;
+    if (!sessionReady) return;
     setProfileLoading(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
     try {
-      const response = await api.saveProfile(initData, buildProfilePayload(profileForm));
+      const response = await api.saveProfile(buildProfilePayload(profileForm));
       if (response.profile) {
         setProfileForm({
           name: response.profile.name,
@@ -206,58 +227,55 @@ export default function TelegramMiniAppPage() {
       setProfileCompleted(response.profileCompleted);
       setStatus('Анкета сохранена.');
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Не удалось сохранить анкету.';
-      setError(message);
+      handleApiError(reason, 'Не удалось сохранить анкету.');
     } finally {
       setProfileLoading(false);
     }
   };
 
   const publishProfileAction = async () => {
-    if (!initData || !profileCompleted) return;
+    if (!sessionReady || !profileCompleted) return;
     setProfilePublishing(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
     try {
-      const response = await api.publishProfile(initData);
+      const response = await api.publishProfile();
       setProfilePreview(response.preview);
       setStatus('Анкета опубликована в канале!');
       setChannelInviteLink(response.channelInviteLink ?? null);
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Не удалось опубликовать анкету.';
-      setError(message);
+      handleApiError(reason, 'Не удалось опубликовать анкету.');
     } finally {
       setProfilePublishing(false);
     }
   };
 
   const previewListingAction = async () => {
-    if (!initData || listingDisabled) return;
+    if (!sessionReady || listingDisabled) return;
     setListingLoading(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
     try {
-      const { preview } = await api.previewListing(initData, buildListingPayload(listingForm));
+      const { preview } = await api.previewListing(buildListingPayload(listingForm));
       setListingPreview(preview);
       setStatus('Предпросмотр объявления обновлён.');
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Не удалось подготовить объявление.';
-      setError(message);
+      handleApiError(reason, 'Не удалось подготовить объявление.');
     } finally {
       setListingLoading(false);
     }
   };
 
   const publishListingAction = async () => {
-    if (!initData || listingDisabled) return;
+    if (!sessionReady || listingDisabled) return;
     setListingLoading(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
     try {
-      const response = await api.createListing(initData, {
+      const response = await api.createListing({
         ...buildListingPayload(listingForm),
         publish: true
       });
@@ -276,8 +294,7 @@ export default function TelegramMiniAppPage() {
         setChannelInviteLink(response.channelInviteLink);
       }
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Не удалось опубликовать объявление.';
-      setError(message);
+      handleApiError(reason, 'Не удалось опубликовать объявление.');
     } finally {
       setListingLoading(false);
     }
@@ -337,7 +354,7 @@ export default function TelegramMiniAppPage() {
         <h2 style={{ fontSize: 20, marginBottom: 16 }}>Анкета</h2>
         <ProfileForm
           value={profileForm}
-          disabled={profileBusy || !initData}
+          disabled={profileBusy || !sessionReady}
           loading={profileLoading}
           uploading={catPhotoUploading}
           onChange={handleProfileChange}
@@ -350,7 +367,7 @@ export default function TelegramMiniAppPage() {
             type="button"
             style={{ ...publishButtonStyle, opacity: profileCompleted ? 1 : 0.5 }}
             onClick={publishProfileAction}
-            disabled={profileBusy || !initData || !profileCompleted}
+            disabled={profileBusy || !sessionReady || !profileCompleted}
           >
             {profilePublishing ? 'Публикуем…' : 'Опубликовать анкету'}
           </button>
