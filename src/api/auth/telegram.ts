@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Forbidden } from '../../core/errors';
 import { cfg } from '../../core/config';
+import { consumeInitDataReplay } from './telegramReplay';
 
 export interface TelegramInitUser {
   id: number;
@@ -16,11 +17,13 @@ export interface TelegramInitUser {
 export interface TelegramAuthContext {
   user: TelegramInitUser;
   authDate: number;
-  raw: string;
+  raw?: string;
+  sessionToken?: string;
+  tokenIssued?: boolean;
 }
 
 const SECRET_KEY_SALT = 'WebAppData';
-const DEFAULT_MAX_AGE_SECONDS = 3600;
+const DEFAULT_MAX_AGE_SECONDS = 300;
 
 const getSecretKey = (botToken: string) =>
   crypto.createHmac('sha256', SECRET_KEY_SALT).update(botToken).digest();
@@ -84,6 +87,8 @@ export const verifyTelegramInitData = (
   if (!user) {
     throw new Forbidden('Telegram init data user payload is invalid');
   }
+
+  consumeInitDataReplay({ userId: user.id, hash });
 
   return { user, authDate, raw: initData };
 };

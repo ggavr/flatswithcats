@@ -8,8 +8,7 @@ export const createBot = () => {
   const bot = new Telegraf(cfg.botToken);
   buildRouter(bot);
   bot.catch((err, ctx) => {
-    const scene = (ctx as unknown as { scene?: { current?: { id?: string } } }).scene;
-    const scopedLog = log.withContext({ scope: 'bot', from: ctx.from?.id, scene: scene?.current?.id });
+    const scopedLog = log.withContext({ scope: 'bot', from: ctx.from?.id });
     const appError = toAppError(err);
     scopedLog.error('Bot error', appError);
     const message =

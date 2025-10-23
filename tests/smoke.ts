@@ -40,6 +40,7 @@ async function main() {
   const { profileService } = await import('../src/services/profile.service');
   const { listingService, normalizeDateRange } = await import('../src/services/listing.service');
   const { templates } = await import('../src/domain/templates');
+  const { issueSessionToken, verifySessionToken } = await import('../src/api/auth/sessionToken');
 
   const storedProfile = await profileService.save({
     tgId: 1,
@@ -110,6 +111,15 @@ async function main() {
     }),
     (error: unknown) => error instanceof Error && error.message.includes('Сначала заполни анкету')
   );
+
+  const sessionUser = {
+    id: 42,
+    first_name: 'Test'
+  };
+  const sessionToken = issueSessionToken(sessionUser, Math.floor(Date.now() / 1000));
+  const sessionPayload = verifySessionToken(sessionToken);
+  assert.equal(sessionPayload.sub, sessionUser.id);
+  assert.equal(sessionPayload.user.first_name, 'Test');
 
   console.log('Smoke tests passed');
 }

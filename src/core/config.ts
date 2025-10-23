@@ -58,6 +58,7 @@ export const cfg = {
     dbProfiles: requireEnv('NOTION_DB_PROFILES'),
     dbListings: requireEnv('NOTION_DB_LISTINGS')
   },
+  webAppUrl: process.env.WEBAPP_URL?.trim() ?? null,
   media: {
     storageRoot: resolveStorageRoot(process.env.MEDIA_STORAGE_ROOT),
     publicPath: normalizePublicPath(process.env.MEDIA_PUBLIC_PATH ?? '/uploads'),

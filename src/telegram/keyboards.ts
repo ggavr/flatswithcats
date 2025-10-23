@@ -1,37 +1,35 @@
 import { Markup } from 'telegraf';
 
-const resize = (rows: string[][]) => Markup.keyboard(rows).resize();
+interface MainKeyboardOptions {
+  hasProfile: boolean;
+  webAppUrl?: string | null;
+}
 
-const main = (registered = false) => {
-  const rows = registered
-    ? [
-        ['📢 Разместить объявление'],
-        ['ℹ️ Мой профиль']
-      ]
-    : [
-        ['📝 Регистрация', '📢 Разместить объявление'],
-        ['ℹ️ Мой профиль']
-      ];
-  return resize(rows);
+const main = ({ hasProfile, webAppUrl }: MainKeyboardOptions) => {
+  const rows: Array<
+    Array<ReturnType<typeof Markup.button.webApp> | string>
+  > = [];
+
+  if (webAppUrl) {
+    rows.push([Markup.button.webApp('🚀 Открыть мини-эпп', webAppUrl)]);
+  }
+
+  const profileRow: string[] = ['ℹ️ Мой профиль', '📢 Мои объявления'];
+  if (!hasProfile) {
+    profileRow[0] = 'ℹ️ Как начать';
+  }
+  rows.push(profileRow);
+  rows.push(['📞 Поддержка', 'Главное меню']);
+
+  return Markup.keyboard(rows).resize().persistent();
+};
+
+const inlineApp = (webAppUrl?: string | null) => {
+  if (!webAppUrl) return undefined;
+  return Markup.inlineKeyboard([Markup.button.webApp('🚀 Открыть мини-эпп', webAppUrl)]);
 };
 
 export const kb = {
   main,
-  cancel: () => resize([['Отмена']]),
-  postProfile: () =>
-    resize([
-      ['🚪 Присоединиться к чату'],
-      ['📢 Разместить объявление'],
-      ['✏️ Обновить анкету'],
-      ['Главное меню'],
-      ['Отмена']
-    ]),
-  profileActions: () =>
-    resize([
-      ['📢 Разместить объявление'],
-      ['✏️ Обновить анкету'],
-      ['Главное меню'],
-      ['Отмена']
-    ]),
-  confirmListing: () => resize([['✅ Опубликовать'], ['↩️ Изменить'], ['Отмена']])
+  inlineApp
 };
