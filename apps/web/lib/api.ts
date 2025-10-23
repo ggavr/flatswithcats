@@ -2,6 +2,7 @@ import type {
   CreateListingResponse,
   ListingDraftPayload,
   ListingPreviewResponse,
+  ListingsIndexResponse,
   MediaUploadResponse,
   ProfileResponse,
   PublishListingResponse,
@@ -181,6 +182,8 @@ export const api = {
   },
 
   fetchProfile: () => request<ProfileResponse>('/api/profile'),
+
+  fetchListings: () => request<ListingsIndexResponse>('/api/listings'),
 
   saveProfile: (payload: SaveProfilePayload) => jsonRequest<ProfileResponse>('/api/profile', payload, 'PUT'),
 

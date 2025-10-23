@@ -38,6 +38,17 @@ export interface CreateListingResponse {
   channelInviteLink?: string;
 }
 
+export interface ListingsIndexItem extends Listing {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: 'draft' | 'published';
+}
+
+export interface ListingsIndexResponse {
+  listings: ListingsIndexItem[];
+}
+
 export interface MediaUploadResponse {
   fileId: string;
   url: string;

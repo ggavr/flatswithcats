@@ -28,6 +28,32 @@ const toDraftInput = (body: ListingRequestBody) => ({
 });
 
 export const registerListingRoutes = async (server: AppFastifyInstance) => {
+  server.get('/api/listings', { preHandler: requireTelegramAuth }, async (request, reply) => {
+    const tgId = requireTelegramUserId(request);
+    const listings = await listingService.listByOwner(tgId);
+    const items = listings.map((listing) => ({
+      id: listing.id,
+      ownerTgId: listing.ownerTgId,
+      profileId: listing.profileId,
+      name: listing.name,
+      city: listing.city,
+      country: listing.country,
+      catPhotoId: listing.catPhotoId,
+      catPhotoUrl: listing.catPhotoUrl,
+      apartmentDescription: listing.apartmentDescription,
+      apartmentPhotoId: listing.apartmentPhotoId,
+      apartmentPhotoUrl: listing.apartmentPhotoUrl,
+      dates: listing.dates,
+      conditions: listing.conditions,
+      preferredDestinations: listing.preferredDestinations,
+      channelMessageId: listing.channelMessageId,
+      createdAt: listing.createdAt,
+      updatedAt: listing.updatedAt,
+      status: listing.channelMessageId ? 'published' : 'draft'
+    }));
+    return reply.send({ listings: items });
+  });
+
   server.post('/api/listings/preview', { preHandler: requireTelegramAuth }, async (request, reply) => {
     const tgId = requireTelegramUserId(request);
     const body = request.body as ListingRequestBody;

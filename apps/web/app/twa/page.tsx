@@ -4,7 +4,7 @@ import type { FormEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@lib/api';
 import { getTelegramInitData, isTelegramEnvironment, prepareTelegramWebApp } from '@lib/telegram';
-import type { ListingDraftPayload, SaveProfilePayload } from '@lib/types';
+import type { ListingDraftPayload, ListingsIndexItem, SaveProfilePayload } from '@lib/types';
 import { ProfileForm, type ProfileFormValue } from '../../components/profile/ProfileForm';
 import { ListingForm, type ListingFormValue } from '../../components/listing/ListingForm';
 import { cardStyle, publishButtonStyle } from '../../components/ui/styles';
@@ -51,7 +51,6 @@ const buildListingPayload = (form: ListingFormState): ListingDraftPayload => ({
 });
 
 export default function TelegramMiniAppPage() {
-  const [initData, setInitData] = useState<string | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,14 +68,16 @@ export default function TelegramMiniAppPage() {
   const [listingPreview, setListingPreview] = useState<string | null>(null);
   const [listingLoading, setListingLoading] = useState(false);
   const [apartmentPhotoUploading, setApartmentPhotoUploading] = useState(false);
+  const [userListings, setUserListings] = useState<ListingsIndexItem[]>([]);
+  const [listingsLoading, setListingsLoading] = useState(false);
 
   const handleApiError = (reason: unknown, fallback: string) => {
     if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
-      setSessionReady(false);
+      const hadInitData = api.auth.hasInitData();
       api.auth.clear();
-      setInitData(null);
+      setSessionReady(false);
       setError(
-        api.auth.hasInitData()
+        hadInitData
           ? 'Не удалось обновить сессию Telegram. Закрой и заново открой мини‑эпп через бота.'
           : 'Сессия Telegram отсутствует. Запусти мини‑эпп из Telegram ещё раз.'
       );
@@ -93,7 +94,6 @@ export default function TelegramMiniAppPage() {
     const bootstrap = async (init: string) => {
       api.auth.setInitData(init);
       setSessionReady(false);
-      setInitData(init);
       setError(null);
       setStatus(null);
       setChannelInviteLink(null);
@@ -120,6 +120,16 @@ export default function TelegramMiniAppPage() {
         }
         setProfileCompleted(profileCompleted);
         setSessionReady(true);
+        try {
+          const listingsResponse = await api.fetchListings();
+          if (!cancelled) {
+            setUserListings(listingsResponse.listings);
+          }
+        } catch (listError) {
+          if (!cancelled) {
+            handleApiError(listError, 'Не удалось получить список объявлений.');
+          }
+        }
       } catch (reason) {
         if (cancelled) return;
         handleApiError(reason, 'Не удалось загрузить анкету.');
@@ -181,6 +191,40 @@ export default function TelegramMiniAppPage() {
 
   const handleListingChange = (field: keyof ListingFormState, value: string) => {
     setListingForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const formatTimestamp = (value: string) => {
+    try {
+      return new Date(value).toLocaleString('ru-RU', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+    } catch (error) {
+      return value;
+    }
+  };
+
+  const getStatusBadgeStyle = (status: ListingsIndexItem['status']) => {
+    if (status === 'published') {
+      return { background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' };
+    }
+    return { background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7' };
+  };
+
+  const reloadListings = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setListingsLoading(true);
+    }
+    try {
+      const { listings } = await api.fetchListings();
+      setUserListings(listings);
+    } catch (reason) {
+      handleApiError(reason, 'Не удалось получить список объявлений.');
+    } finally {
+      if (!options?.silent) {
+        setListingsLoading(false);
+      }
+    }
   };
 
   const uploadPhoto = async (file: File, target: 'profile' | 'listing') => {
@@ -299,6 +343,7 @@ export default function TelegramMiniAppPage() {
       if (response.channelInviteLink) {
         setChannelInviteLink(response.channelInviteLink);
       }
+      await reloadListings({ silent: true });
     } catch (reason) {
       handleApiError(reason, 'Не удалось опубликовать объявление.');
     } finally {
@@ -455,6 +500,67 @@ export default function TelegramMiniAppPage() {
               {listingPreview}
             </pre>
           </article>
+        )}
+      </section>
+
+      <section style={cardStyle}>
+        <h2 style={{ fontSize: 20, marginBottom: 16 }}>Мои объявления</h2>
+        {listingsLoading ? (
+          <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>Загружаем список объявлений…</p>
+        ) : userListings.length === 0 ? (
+          <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>
+            Здесь появятся сохранённые и опубликованные объявления.
+          </p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 12 }}>
+            {userListings.map((item) => {
+              const statusLabel = item.status === 'published' ? 'Опубликовано' : 'Черновик';
+              const badgeStyle = getStatusBadgeStyle(item.status);
+              return (
+                <li
+                  key={item.id}
+                  style={{
+                    border: '1px solid #e4e4e7',
+                    borderRadius: 10,
+                    padding: 16,
+                    display: 'grid',
+                    gap: 8,
+                    background: '#fafafa'
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: '#1f2937' }}>
+                      {item.city}, {item.country}
+                    </div>
+                    <span
+                      style={{
+                        ...badgeStyle,
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 600
+                      }}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 14, color: '#475569' }}>{item.dates}</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>{item.conditions}</div>
+                  <div style={{ fontSize: 13, color: '#6b7280' }}>
+                    Желаемые направления: {item.preferredDestinations || '—'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    {item.channelMessageId
+                      ? `ID поста в канале: ${item.channelMessageId}`
+                      : 'Пока не опубликовано в канале'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    Обновлено: {formatTimestamp(item.updatedAt)}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </main>

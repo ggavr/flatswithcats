@@ -73,7 +73,7 @@ const ensureListingsSchema = async (): Promise<Set<string>> => {
   }
 };
 
-const toListing = (page: any): Listing & { id: string } => {
+const toListing = (page: any): Listing & { id: string; createdAt: string; updatedAt: string } => {
   const props = page?.properties ?? {};
   return {
     id: page.id,
@@ -90,7 +90,9 @@ const toListing = (page: any): Listing & { id: string } => {
     conditions: parseRichText(props.conditions),
     dates: parseRichText(props.dates),
     preferredDestinations: parseRichText(props.preferredDestinations),
-    channelMessageId: parseNumber(props.channelMessageId)
+    channelMessageId: parseNumber(props.channelMessageId),
+    createdAt: typeof page?.created_time === 'string' ? page.created_time : new Date().toISOString(),
+    updatedAt: typeof page?.last_edited_time === 'string' ? page.last_edited_time : new Date().toISOString()
   };
 };
 
@@ -143,6 +145,21 @@ export const listingsRepo = {
       return toListing(page);
     } catch (error) {
       return handleNotionError(error, { id, op: 'listings.findById' });
+    }
+  },
+
+  async findByOwner(tgId: number): Promise<Array<Listing & { id: string; createdAt: string; updatedAt: string }>> {
+    try {
+      const response: any = await (notion as any).databases.query({
+        database_id: DB.listings,
+        filter: { property: 'tgId', number: { equals: tgId } },
+        sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+        page_size: 25
+      });
+      const results = Array.isArray(response.results) ? response.results : [];
+      return results.map((page) => toListing(page));
+    } catch (error) {
+      return handleNotionError(error, { tgId, op: 'listings.findByOwner' });
     }
   }
 };

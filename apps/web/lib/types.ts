@@ -5,6 +5,8 @@ export type {
   ListingDraftPayload,
   ListingPreviewResponse,
   CreateListingResponse,
+  ListingsIndexItem,
+  ListingsIndexResponse,
   MediaUploadResponse,
   PublishProfileResponse,
   PublishListingResponse

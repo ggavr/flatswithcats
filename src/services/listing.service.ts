@@ -285,5 +285,9 @@ export const listingService = {
 
   async getById(id: string) {
     return listingsRepo.findById(id);
+  },
+
+  async listByOwner(ownerTgId: number) {
+    return listingsRepo.findByOwner(ownerTgId);
   }
 };

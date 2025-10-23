@@ -26,16 +26,19 @@ async function main() {
 
   listingsRepo.create = async (listing: any) => {
     const id = `listing-${memoryListings.size + 1}`;
-    const stored = { ...listing, id };
+    const timestamp = new Date().toISOString();
+    const stored = { ...listing, id, createdAt: timestamp, updatedAt: timestamp };
     memoryListings.set(id, stored);
     return stored;
   };
   listingsRepo.updateChannelMessage = async (id: string, messageId: number) => {
     const current = memoryListings.get(id);
     assert.ok(current, `Listing ${id} must exist`);
-    memoryListings.set(id, { ...current, channelMessageId: messageId });
+    memoryListings.set(id, { ...current, channelMessageId: messageId, updatedAt: new Date().toISOString() });
   };
   listingsRepo.findById = async (id: string) => memoryListings.get(id) ?? null;
+  listingsRepo.findByOwner = async (tgId: number) =>
+    [...memoryListings.values()].filter((listing) => listing.ownerTgId === tgId);
 
   const { profileService } = await import('../src/services/profile.service');
   const { listingService, normalizeDateRange } = await import('../src/services/listing.service');
@@ -76,6 +79,10 @@ async function main() {
   assert.equal(memoryListings.get(listingId)?.apartmentPhotoId, 'apt_photo');
   assert.equal(memoryListings.get(listingId)?.preferredDestinations, 'Берлин');
   assert.equal(memoryListings.get(listingId)?.conditions, '500 € + корм');
+
+  const ownerListings = await listingService.listByOwner(1);
+  assert.ok(ownerListings.length >= 1);
+  assert.equal(ownerListings[0]?.ownerTgId, 1);
 
   const normalizedInlineRange = normalizeDateRange('1-15 июля 2024');
   assert.equal(normalizedInlineRange, '01.07.2024 - 15.07.2024');
