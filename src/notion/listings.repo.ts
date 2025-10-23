@@ -4,6 +4,18 @@ import { DependencyError } from '../core/errors';
 import { log } from '../core/logger';
 import { createCache } from '../core/cache';
 
+type NotionProperty = {
+  rich_text?: Array<{ plain_text?: string | null }>;
+  number?: number | null;
+};
+
+type NotionPage = {
+  id: string;
+  properties?: Record<string, NotionProperty>;
+  created_time?: string;
+  last_edited_time?: string;
+};
+
 const text = (value?: string | null) => {
   if (!value) return [];
   return [{ type: 'text', text: { content: value.toString().slice(0, 1900) } }];
@@ -89,7 +101,7 @@ const ensureListingsSchema = async (): Promise<Set<string>> => {
   }
 };
 
-const toListing = (page: any): StoredListing => {
+const toListing = (page: NotionPage): StoredListing => {
   const props = page?.properties ?? {};
   return {
     id: page.id,
@@ -138,7 +150,7 @@ export const listingsRepo = {
         parent: { database_id: DB.listings },
         properties: buildProperties(listing)
       } as any);
-      const stored = toListing(page);
+      const stored = toListing(page as NotionPage);
       listingByIdCache.set(stored.id, stored);
       listingsByOwnerCache.delete(stored.ownerTgId);
       return stored;
@@ -167,8 +179,8 @@ export const listingsRepo = {
     const cached = listingByIdCache.get(id);
     if (cached) return cached;
     try {
-      const page: any = await notion.pages.retrieve({ page_id: id } as any);
-      const stored = toListing(page);
+      const page = await notion.pages.retrieve({ page_id: id } as any);
+      const stored = toListing(page as NotionPage);
       listingByIdCache.set(stored.id, stored);
       return stored;
     } catch (error) {
@@ -186,7 +198,7 @@ export const listingsRepo = {
         sorts: [{ timestamp: 'created_time', direction: 'descending' }],
         page_size: 25
       });
-      const results = Array.isArray(response.results) ? response.results : [];
+      const results = Array.isArray(response.results) ? (response.results as NotionPage[]) : [];
       const mapped = results.map((page) => toListing(page));
       for (const item of mapped) {
         listingByIdCache.set(item.id, item);
