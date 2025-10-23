@@ -57,6 +57,8 @@ async function main() {
   assert.equal(storedProfile.catName, 'Мурка');
 
   const draft = await listingService.buildDraft(1, {
+    city: 'Москва',
+    country: 'Россия',
     apartmentDescription: ' Просторная квартира ',
     apartmentPhotoId: 'apt_photo',
     apartmentPhotoUrl: '',
@@ -68,8 +70,8 @@ async function main() {
 
   assert.ok(listingId);
   assert.equal(listing.dates, '01.06.2025 - 30.06.2025');
-  assert.equal(listing.city, storedProfile.city);
-  assert.equal(listing.country, storedProfile.country);
+  assert.equal(listing.city, 'Москва');
+  assert.equal(listing.country, 'Россия');
   assert.equal(memoryListings.get(listingId)?.apartmentPhotoId, 'apt_photo');
   assert.equal(memoryListings.get(listingId)?.preferredDestinations, 'Берлин');
   assert.equal(memoryListings.get(listingId)?.conditions, '500 € + корм');
@@ -79,9 +81,35 @@ async function main() {
 
   const previewWithBackslash = templates.profilePreview({
     ...storedProfile,
-    intro: 'Путь: C:\\Users\\Alice'
+    intro: 'Путь: C\\Users\\Alice'
   });
-  assert.ok(previewWithBackslash.includes('C:\\\\Users'), 'Backslashes must be escaped in Markdown');
+  assert.ok(/C\\+Users/.test(previewWithBackslash), 'Backslashes must be escaped in Markdown');
+
+  memoryUsers.set(2, {
+    id: 'profile-2',
+    tgId: 2,
+    name: 'Bob',
+    city: '',
+    country: '',
+    intro: '',
+    catName: 'Барсик',
+    catPhotoId: '',
+    catPhotoUrl: ''
+  });
+
+  await assert.rejects(
+    listingService.buildDraft(2, {
+      city: 'Прага',
+      country: 'Чехия',
+      apartmentDescription: 'Апартаменты в центре',
+      apartmentPhotoId: 'apt_photo_2',
+      apartmentPhotoUrl: '',
+      dates: '01/07/25 - 15/07/25',
+      conditions: 'Обмен',
+      preferredDestinations: 'Берлин'
+    }),
+    (error: unknown) => error instanceof Error && error.message.includes('Сначала заполни анкету')
+  );
 
   console.log('Smoke tests passed');
 }

@@ -10,10 +10,10 @@ export const registerProfileRoutes = async (server: AppFastifyInstance) => {
     const tgId = requireTelegramUserId(request);
     const profile = await profileService.get(tgId);
     if (!profile) {
-      return reply.send({ profile: null });
+      return reply.send({ profile: null, preview: null, profileCompleted: false });
     }
     const preview = templates.profilePreview(profile);
-    return reply.send({ profile, preview });
+    return reply.send({ profile, preview, profileCompleted: profileService.isComplete(profile) });
   });
 
   server.put('/api/profile', { preHandler: requireTelegramAuth }, async (request, reply) => {
@@ -30,21 +30,21 @@ export const registerProfileRoutes = async (server: AppFastifyInstance) => {
     const payload = {
       tgId,
       name: body.name ?? '',
-      location: body.location ?? '',
       intro: body.intro ?? '',
       catName: body.catName ?? '',
       catPhotoId: body.catPhotoId ?? '',
-      catPhotoUrl: body.catPhotoUrl ?? ''
+      catPhotoUrl: body.catPhotoUrl ?? '',
+      location: body.location
     };
 
     const profile = await profileService.save(payload);
     const preview = templates.profilePreview(profile);
-    return reply.send({ profile, preview });
+    return reply.send({ profile, preview, profileCompleted: profileService.isComplete(profile) });
   });
 
   server.post('/api/profile/publish', { preHandler: requireTelegramAuth }, async (request, reply) => {
     const tgId = requireTelegramUserId(request);
-    const profile = await profileService.ensure(tgId);
+    const profile = await profileService.ensureComplete(tgId);
     const preview = templates.profilePreview(profile);
     const messageId = await publishService.publishProfile(server.telegram, profile, preview);
     await profileService.updateChannelMessage(tgId, messageId);

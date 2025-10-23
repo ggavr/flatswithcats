@@ -9,26 +9,29 @@ const clean = (value: string, field: string, max = 180) => {
   return trimmed;
 };
 
-const normalizeLocation = (value: string) => {
+const normalizeLocation = (value: string | undefined) => {
+  if (!value || !value.trim()) {
+    return { city: '', country: '' };
+  }
   const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
-  if (parts.length === 0) throw new ValidationError('Укажите город и страну через запятую, например: Барселона, Испания');
   const city = clean(parts[0], 'Город');
   const country = clean(parts[1] ?? parts[0], 'Страна');
   return { city, country };
 };
 
+const isNonEmpty = (value: string | null | undefined) => Boolean(value && value.trim());
+
 export const profileService = {
   async save(input: {
     tgId: number;
     name: string;
-    location: string;
     intro: string;
     catName: string;
     catPhotoId: string;
     catPhotoUrl?: string;
+    location?: string;
   }): Promise<Profile & { id: string }> {
     const name = clean(input.name, 'Имя', 120);
-    const { city, country } = normalizeLocation(input.location);
     const intro = clean(input.intro, 'Интро', 600);
     const catName = clean(input.catName, 'Имя кота', 100);
     const catPhotoId = clean(input.catPhotoId, 'Фото кота', 512);
@@ -37,7 +40,18 @@ export const profileService = {
       throw new ValidationError('Ссылка на фото кота слишком длинная (максимум 2048 символов)');
     }
 
-    const profile: Profile = { tgId: input.tgId, name, city, country, intro, catName, catPhotoId, catPhotoUrl };
+    const { city, country } = normalizeLocation(input.location);
+
+    const profile: Profile = {
+      tgId: input.tgId,
+      name,
+      city,
+      country,
+      intro,
+      catName,
+      catPhotoId,
+      catPhotoUrl
+    };
     const stored = await profilesRepo.upsert(profile);
     if (!stored) throw new Error('Не удалось сохранить анкету');
     return { ...stored, intro, catName, catPhotoUrl: stored.catPhotoUrl ?? catPhotoUrl };
@@ -50,6 +64,24 @@ export const profileService = {
   async ensure(tgId: number) {
     const profile = await profilesRepo.findByTgId(tgId);
     if (!profile) throw new NotFound('Анкета не найдена. Начни с /start');
+    return profile;
+  },
+
+  isComplete(profile: Profile | null | undefined) {
+    if (!profile) return false;
+    return (
+      isNonEmpty(profile.name) &&
+      isNonEmpty(profile.catName) &&
+      isNonEmpty(profile.intro) &&
+      isNonEmpty(profile.catPhotoId)
+    );
+  },
+
+  async ensureComplete(tgId: number) {
+    const profile = await this.ensure(tgId);
+    if (!this.isComplete(profile)) {
+      throw new ValidationError('Сначала заполни анкету: имя, кот, история и фото обязательны.');
+    }
     return profile;
   },
 

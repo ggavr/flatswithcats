@@ -7,7 +7,6 @@ import { templates } from '../../domain/templates';
 
 interface RegistrationState extends Scenes.WizardSessionData {
   name?: string;
-  location?: string;
   intro?: string;
   catName?: string;
   catPhotoId?: string;
@@ -20,7 +19,7 @@ const CANCEL = 'отмена';
 const JOIN_CHAT = '🚪 Присоединиться к чату';
 const CREATE_LISTING = '📢 Разместить объявление';
 const EDIT_PROFILE = '✏️ Обновить анкету';
-const FINAL_STEP_INDEX = 6;
+const FINAL_STEP_INDEX = 4;
 
 const getText = (ctx: RegistrationCtx) => {
   if ('message' in ctx && ctx.message && 'text' in ctx.message) {
@@ -46,7 +45,6 @@ const saveProfileAndShowPreview = async (ctx: RegistrationCtx, state: Registrati
     const stored = await profileService.save({
       tgId,
       name: state.name ?? '',
-      location: state.location ?? '',
       intro: state.intro ?? '',
       catName: state.catName ?? '',
       catPhotoId: state.catPhotoId ?? ''
@@ -84,7 +82,7 @@ export const onboardingScene = new Scenes.WizardScene<RegistrationCtx>(
       return ctx.scene.leave();
     }
     state.name = text;
-    await ctx.reply('Шаг 2. Укажи, пожалуйста, город и страну (пример: Барселона, Испания).', kb.cancel());
+    await ctx.reply('Шаг 2. Как зовут твоего кота (или котов)?', kb.cancel());
     return ctx.wizard.next();
   },
   async (ctx) => {
@@ -95,7 +93,7 @@ export const onboardingScene = new Scenes.WizardScene<RegistrationCtx>(
       await ctx.reply('Окей, возвращаю в меню.', kb.main(false));
       return ctx.scene.leave();
     }
-    state.location = text;
+    state.catName = text;
     await ctx.reply(
       [
         'Шаг 3. Расскажи, пожалуйста, в нескольких предложениях о себе:',
@@ -117,7 +115,7 @@ export const onboardingScene = new Scenes.WizardScene<RegistrationCtx>(
     await ctx.reply(
       [
         'Шаг 4. Пришли, пожалуйста, фото кота.',
-        'В подписи напиши его имя, а если котов несколько — перечисли через запятую.'
+        'Если котов несколько — можешь указать имена в подписи.'
       ].join('\n'),
       kb.cancel()
     );
@@ -145,30 +143,10 @@ export const onboardingScene = new Scenes.WizardScene<RegistrationCtx>(
     const caption = ctx.message.caption?.trim();
     if (caption) {
       state.catName = caption;
-      const saved = await saveProfileAndShowPreview(ctx, state);
-      if (!saved) return resetToStart(ctx);
-      return;
     }
-
-    await ctx.reply('Как зовут кота? Напиши, пожалуйста, имя одним сообщением.', kb.cancel());
-    return ctx.wizard.next();
-  },
-  async (ctx) => {
-    const state = ctx.wizard.state as RegistrationState;
-    const text = getText(ctx);
-    if (!text) return;
-    if (text.toLowerCase() === CANCEL) {
-      await ctx.reply('Окей, возвращаю в меню.', kb.main(false));
-      return ctx.scene.leave();
-    }
-    if (!state.catPhotoId) {
-      await ctx.reply('Не вижу фото кота. Пожалуйста, отправь фото ещё раз.', kb.cancel());
-      ctx.wizard.selectStep(4);
-      return;
-    }
-    state.catName = text;
     const saved = await saveProfileAndShowPreview(ctx, state);
     if (!saved) return resetToStart(ctx);
+    return;
   },
   async (ctx) => {
     const text = getText(ctx);
@@ -185,7 +163,7 @@ export const onboardingScene = new Scenes.WizardScene<RegistrationCtx>(
       return ctx.scene.leave();
     }
 
-    const profile = await profileService.ensure(tgId);
+    const profile = await profileService.ensureComplete(tgId);
     if (text === JOIN_CHAT) {
       const caption = templates.profilePreview(profile);
       const messageId = await publishService.publishProfile(ctx.telegram, profile, caption);

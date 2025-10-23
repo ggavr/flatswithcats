@@ -5,6 +5,8 @@ import { requireTelegramAuth } from '../hooks/requireTelegramAuth';
 import { requireTelegramUserId } from '../utils/auth';
 
 type ListingRequestBody = {
+  city?: string;
+  country?: string;
   apartmentDescription?: string;
   apartmentPhotoId?: string;
   apartmentPhotoUrl?: string;
@@ -15,6 +17,8 @@ type ListingRequestBody = {
 };
 
 const toDraftInput = (body: ListingRequestBody) => ({
+  city: body.city ?? '',
+  country: body.country ?? '',
   apartmentDescription: body.apartmentDescription ?? '',
   apartmentPhotoId: body.apartmentPhotoId ?? '',
   apartmentPhotoUrl: body.apartmentPhotoUrl ?? '',
@@ -28,7 +32,7 @@ export const registerListingRoutes = async (server: AppFastifyInstance) => {
     const tgId = requireTelegramUserId(request);
     const body = request.body as ListingRequestBody;
     const draft = await listingService.buildDraft(tgId, toDraftInput(body));
-    const profile = await profileService.ensure(tgId);
+    const profile = await profileService.ensureComplete(tgId);
     const preview = templates.listingCard(profile, draft);
     return reply.send({ preview, listing: draft });
   });
@@ -41,7 +45,7 @@ export const registerListingRoutes = async (server: AppFastifyInstance) => {
 
     let published: null | { messageId: number } = null;
     if (body.publish) {
-      const profile = await profileService.ensure(tgId);
+      const profile = await profileService.ensureComplete(tgId);
       const caption = templates.listingCard(profile, listing);
       const messageId = await publishService.publishListing(server.telegram, listing, caption);
       await listingService.updateChannelMessage(listingId, messageId);
@@ -58,7 +62,7 @@ export const registerListingRoutes = async (server: AppFastifyInstance) => {
     if (!listing || listing.ownerTgId !== tgId) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'Listing not found' });
     }
-    const profile = await profileService.ensure(tgId);
+    const profile = await profileService.ensureComplete(tgId);
     const preview = templates.listingCard(profile, listing);
     return reply.send({ listing, preview });
   });
@@ -70,7 +74,7 @@ export const registerListingRoutes = async (server: AppFastifyInstance) => {
     if (!listing || listing.ownerTgId !== tgId) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'Listing not found' });
     }
-    const profile = await profileService.ensure(tgId);
+    const profile = await profileService.ensureComplete(tgId);
     const caption = templates.listingCard(profile, listing);
     const messageId = await publishService.publishListing(server.telegram, listing, caption);
     await listingService.updateChannelMessage(id, messageId);

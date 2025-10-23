@@ -226,6 +226,8 @@ export const normalizeDateRange = (value: string) => {
 };
 
 type ListingDraftInput = {
+  city: string;
+  country: string;
   apartmentDescription: string;
   apartmentPhotoId: string;
   apartmentPhotoUrl?: string;
@@ -253,8 +255,8 @@ const buildDraft = (profile: Profile & { id: string }, ownerTgId: number, input:
     ownerTgId,
     profileId: profile.id,
     name: profile.name,
-    city: profile.city,
-    country: profile.country,
+    city: clean(input.city, 'Город', 120),
+    country: clean(input.country, 'Страна', 120),
     catPhotoId: profile.catPhotoId,
     catPhotoUrl: profile.catPhotoUrl,
     apartmentDescription: clean(input.apartmentDescription, 'Описание квартиры'),
@@ -268,7 +270,7 @@ const buildDraft = (profile: Profile & { id: string }, ownerTgId: number, input:
 
 export const listingService = {
   async buildDraft(ownerTgId: number, input: ListingDraftInput) {
-    const profile = await profileService.ensure(ownerTgId);
+    const profile = await profileService.ensureComplete(ownerTgId);
     return buildDraft(profile, ownerTgId, input);
   },
 

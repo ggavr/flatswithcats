@@ -1,47 +1,220 @@
+import Link from 'next/link';
+import styles from './page.module.css';
+
+const steps = [
+  {
+    number: '1',
+    title: 'Создай анкету',
+    text: 'Расскажи о себе, своём коте (или котах!) и вашей квартире другим участникам комьюнити.',
+    image:
+      'https://framerusercontent.com/images/BenVyclI1ZlCnXBgfTWRFF1li3Q.png?scale-down-to=1024&width=1024&height=1024',
+    imageAlt: 'Кот заполняет анкету на ноутбуке'
+  },
+  {
+    number: '2',
+    title: 'Найди вариант',
+    text: 'Найди хозяев с похожими датами поездки и договорись об обмене.',
+    image:
+      'https://framerusercontent.com/images/x5mhk18eDoQ9NC8DmFOQWAJlIM.png?scale-down-to=1024&width=1024&height=1024',
+    imageAlt: 'Кот ищет жильё'
+  },
+  {
+    number: '3',
+    title: 'Путешествуй',
+    text: 'Живи как местный, ухаживая за котом, пока кто-то заботится о твоём.',
+    image:
+      'https://framerusercontent.com/images/3yhGKhP8PUL3pMeJrIm5tAiXWc.png?scale-down-to=1024&width=1024&height=1024',
+    imageAlt: 'Кот путешествует с чемоданом'
+  }
+];
+
+const features = [
+  {
+    title: '(Почти) бесплатные путешествия',
+    text: 'Живёшь как местный и без трат на аренду жилья.',
+    placeholder: styles.placeholderSquare
+  },
+  {
+    title: 'Котейка всегда под присмотром',
+    text: 'Спокойно оставляешь его дома и путешествуешь когда хочешь.',
+    placeholder: styles.placeholderCircle
+  },
+  {
+    title: 'Новые друзья по всему миру',
+    text: 'Комьюнити, построенное на доверии и любви к котикам.',
+    placeholder: styles.placeholderTriangle
+  }
+];
+
+const testimonials = [
+  {
+    quote: '«Жила в Париже у Ксюши и её кота Ефима — самое уютное путешествие!»',
+    name: 'Анна',
+    location: 'Барселона'
+  },
+  {
+    quote: '«Съездил в Берлин, пока мой кот принимал гостей дома 😀»',
+    name: 'Алексей',
+    location: 'Амстердам'
+  },
+  {
+    quote: '«Наконец нашла способ путешествовать и не переживать о котах»',
+    name: 'Мария',
+    location: 'Лиссабон'
+  }
+];
+
+const foundersStory = [
+  'Мы, Гавр и Оля, создали это сообщество прежде всего для себя. У нас самих два кота – Яков и Мелисса, и из-за них мы редко уезжаем в отпуск.',
+  'Пушистых сложно возить с собой, найти котоняню – не менее трудно. Однажды нас осенило: лучше всего о наших котиках могут позаботиться такие же котовладельцы, как и мы!',
+  'Те, кого не нужно предупреждать о внезапных тыгыдыках и громком копании в лотке, кто знает, как кормить, ухаживать и уделять внимание. Мы очень любим наших котов и хотим, чтобы ваши хвостики были в надёжных руках, пока вы отдыхаете 🖤',
+  'Всем кусь!'
+];
+
 export default function HomePage() {
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px', lineHeight: 1.6 }}>
-      <header style={{ marginBottom: 56 }}>
-        <p style={{ textTransform: 'uppercase', letterSpacing: 2, fontSize: 12, color: '#38bdf8' }}>
-          Cats & Flats
-        </p>
-        <h1 style={{ fontSize: 48, margin: '16px 0 24px' }}>
-          Соединяем котов и людей через обмен жильём
-        </h1>
-        <p style={{ maxWidth: 580, fontSize: 18, opacity: 0.9 }}>
-          Телеграм-бот, веб-мини-приложение и полноценный сайт работают на едином ядре. Заполняйте анкету, 
-          публикуйте объявления и следите за статусом из любого интерфейса.
-        </p>
-      </header>
+    <div className={styles.page}>
+      <div className={styles.container}>
+        <header className={styles.top}>
+          <div className={styles.brand}>Flats with Cats®</div>
+          <nav className={styles.links}>
+            <a className={styles.link} href="#how">
+              Как это работает
+            </a>
+            <a className={styles.link} href="#benefits">
+              Преимущества
+            </a>
+            <a className={styles.link} href="#community">
+              Комьюнити
+            </a>
+            <a className={styles.link} href="#testimonials">
+              Отзывы
+            </a>
+          </nav>
+        </header>
 
-      <section style={{ display: 'grid', gap: 32, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-        <article style={{ padding: 24, borderRadius: 16, background: 'rgba(15, 23, 42, 0.4)' }}>
-          <h2 style={{ fontSize: 22, marginBottom: 12 }}>Мини‑эпп</h2>
-          <p style={{ opacity: 0.85 }}>
-            Запускается в Telegram, автоматически авторизует пользователя и позволяет обновлять анкету,
-            готовить объявление с предпросмотром, публиковать его в канал в один клик.
+        <section className={styles.hero}>
+          <h1 className={styles.heroTitle}>
+            Меняйся домами с другими котововладельцами по всему миру 🐾
+          </h1>
+          <p className={styles.heroSubtitle}>
+            Путешествуй без забот благодаря заботе о котиках из других городов и стран 🐈
           </p>
-        </article>
-        <article style={{ padding: 24, borderRadius: 16, background: 'rgba(15, 23, 42, 0.4)' }}>
-          <h2 style={{ fontSize: 22, marginBottom: 12 }}>Публичный сайт</h2>
-          <p style={{ opacity: 0.85 }}>
-            Представляет проект, делится правилами сообщества и привлекает новых участников. Фронтенд готов к 
-            расширению — от SEO‑страниц до каталога объявлений.
-          </p>
-        </article>
-        <article style={{ padding: 24, borderRadius: 16, background: 'rgba(15, 23, 42, 0.4)' }}>
-          <h2 style={{ fontSize: 22, marginBottom: 12 }}>Единое API</h2>
-          <p style={{ opacity: 0.85 }}>
-            Все клиенты используют REST‑эндпоинты: анкеты, объявления, публикации и валидации лежат в общей доменной
-            библиотеке Node.js. Это снижает дублирование и ускоряет разработку.
-          </p>
-        </article>
-      </section>
+          <a className={styles.anchor} href="#how">
+            Как это работает
+          </a>
+        </section>
 
-      <footer style={{ marginTop: 64, fontSize: 14, opacity: 0.6 }}>
-        <p>API по умолчанию доступно на <code>http://localhost:8080</code>. Измените переменную окружения
-          <code> NEXT_PUBLIC_API_BASE_URL</code>, чтобы задать свой URL.</p>
-      </footer>
-    </main>
+        <section id="how" className={styles.steps}>
+          {steps.map((step, index) => (
+            <article
+              key={step.number}
+              className={`${styles.stepRow} ${index % 2 !== 0 ? styles.stepRowReverse : ''}`}
+            >
+              <img
+                className={styles.stepImage}
+                src={step.image}
+                alt={step.imageAlt}
+                loading="lazy"
+              />
+              <div className={styles.stepContent}>
+                <h3 className={styles.stepTitle}>
+                  {step.number}. {step.title}
+                </h3>
+                <p className={styles.stepText}>{step.text}</p>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section id="benefits" className={styles.features}>
+          <div className={styles.featuresGrid}>
+            {features.map((feature) => (
+              <article key={feature.title} className={styles.feature}>
+                <div
+                  className={`${styles.featurePlaceholder} ${feature.placeholder}`}
+                  aria-hidden="true"
+                />
+                <div className={styles.featureTitle}>{feature.title}</div>
+                <p className={styles.featureText}>{feature.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section id="community" className={styles.community}>
+          <div className={styles.communityTitle}>Закрытое комьюнити в Telegram</div>
+          <p className={styles.communityText}>
+            Заполни анкету и получи доступ к чату и каналу. Следи за новыми обменами, находи
+            попутчиков и делись отзывами с теми, кто понимает любовь к хвостатым.
+          </p>
+          <div className={styles.communityActions}>
+            <a
+              className={styles.button}
+              href="https://t.me/flatsforcatsbot"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Перейти в бот
+            </a>
+            <a
+              className={styles.linkAlt}
+              href="https://t.me/+tsZSCk6Oeew1OTNi"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Вступить в чат
+            </a>
+          </div>
+        </section>
+
+        <section id="testimonials" className={styles.testimonials}>
+          <div className={styles.testimonialsGrid}>
+            {testimonials.map((item) => (
+              <article key={item.name} className={styles.testimonial}>
+                <p className={styles.quote}>{item.quote}</p>
+                <div>
+                  <div className={styles.person}>{item.name}</div>
+                  <div className={styles.location}>{item.location}</div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className={styles.founders}>
+          <div className={styles.foundersTitle}>Несколько слов от создателей</div>
+          {foundersStory.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </section>
+
+        <footer className={styles.footer}>
+          <div className={styles.brand}>Flats with Cats</div>
+          <div className={styles.footerLinks}>
+            <a
+              className={styles.footerLink}
+              href="https://t.me/+tsZSCk6Oeew1OTNi"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Telegram-чат
+            </a>
+            <a
+              className={styles.footerLink}
+              href="https://t.me/+5tMK4aVnf782MzQy"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Telegram-канал
+            </a>
+            <Link className={styles.footerLink} href="/policy">
+              Политика (плейсхолдер)
+            </Link>
+          </div>
+          <div>© 2025 Flats with Cats</div>
+        </footer>
+      </div>
+    </div>
   );
 }
