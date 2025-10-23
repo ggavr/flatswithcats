@@ -2,6 +2,7 @@ import { notion, DB, handleNotionError } from './notionClient';
 import type { Listing } from '../core/types';
 import { DependencyError } from '../core/errors';
 import { log } from '../core/logger';
+import { createCache } from '../core/cache';
 
 const text = (value?: string | null) => {
   if (!value) return [];
@@ -31,6 +32,21 @@ const REQUIRED_RICH_TEXT_PROPERTIES: Record<string, { rich_text: Record<string, 
 const REQUIRED_NUMBER_PROPERTIES = ['tgId', 'channelMessageId'];
 
 let cachedListingProperties: Set<string> | null = null;
+const LISTING_CACHE_TTL_MS = 60_000;
+
+type StoredListing = Listing & { id: string; createdAt: string; updatedAt: string };
+
+const listingByIdCache = createCache<string, StoredListing>({
+  ttlMs: LISTING_CACHE_TTL_MS,
+  maxSize: 1000,
+  logContext: 'listings:id'
+});
+
+const listingsByOwnerCache = createCache<number, StoredListing[]>({
+  ttlMs: LISTING_CACHE_TTL_MS,
+  maxSize: 500,
+  logContext: 'listings:owner'
+});
 
 const ensureListingsSchema = async (): Promise<Set<string>> => {
   if (cachedListingProperties) return cachedListingProperties;
@@ -73,7 +89,7 @@ const ensureListingsSchema = async (): Promise<Set<string>> => {
   }
 };
 
-const toListing = (page: any): Listing & { id: string; createdAt: string; updatedAt: string } => {
+const toListing = (page: any): StoredListing => {
   const props = page?.properties ?? {};
   return {
     id: page.id,
@@ -115,14 +131,17 @@ const buildProperties = (listing: Listing) => ({
 });
 
 export const listingsRepo = {
-  async create(listing: Listing): Promise<Listing & { id: string }> {
+  async create(listing: Listing): Promise<StoredListing> {
     try {
       await ensureListingsSchema();
       const page = await notion.pages.create({
         parent: { database_id: DB.listings },
         properties: buildProperties(listing)
       } as any);
-      return toListing(page);
+      const stored = toListing(page);
+      listingByIdCache.set(stored.id, stored);
+      listingsByOwnerCache.delete(stored.ownerTgId);
+      return stored;
     } catch (error) {
       return handleNotionError(error, { tgId: listing.ownerTgId, op: 'listings.create' });
     }
@@ -130,25 +149,36 @@ export const listingsRepo = {
 
   async updateChannelMessage(id: string, messageId: number) {
     try {
+      const cached = listingByIdCache.get(id);
       await notion.pages.update({
         page_id: id,
         properties: { channelMessageId: { number: messageId } }
       });
+      listingByIdCache.delete(id);
+      if (cached) {
+        listingsByOwnerCache.delete(cached.ownerTgId);
+      }
     } catch (error) {
       return handleNotionError(error, { id, op: 'listings.updateChannelMessage' });
     }
   },
 
-  async findById(id: string): Promise<(Listing & { id: string }) | null> {
+  async findById(id: string): Promise<StoredListing | null> {
+    const cached = listingByIdCache.get(id);
+    if (cached) return cached;
     try {
       const page: any = await notion.pages.retrieve({ page_id: id } as any);
-      return toListing(page);
+      const stored = toListing(page);
+      listingByIdCache.set(stored.id, stored);
+      return stored;
     } catch (error) {
       return handleNotionError(error, { id, op: 'listings.findById' });
     }
   },
 
-  async findByOwner(tgId: number): Promise<Array<Listing & { id: string; createdAt: string; updatedAt: string }>> {
+  async findByOwner(tgId: number): Promise<StoredListing[]> {
+    const cached = listingsByOwnerCache.get(tgId);
+    if (cached) return cached;
     try {
       const response: any = await (notion as any).databases.query({
         database_id: DB.listings,
@@ -157,7 +187,12 @@ export const listingsRepo = {
         page_size: 25
       });
       const results = Array.isArray(response.results) ? response.results : [];
-      return results.map((page) => toListing(page));
+      const mapped = results.map((page) => toListing(page));
+      for (const item of mapped) {
+        listingByIdCache.set(item.id, item);
+      }
+      listingsByOwnerCache.set(tgId, mapped);
+      return mapped;
     } catch (error) {
       return handleNotionError(error, { tgId, op: 'listings.findByOwner' });
     }

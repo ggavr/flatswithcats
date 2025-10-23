@@ -1,5 +1,5 @@
 type LogLevel = 'info' | 'warn' | 'error';
-interface Logger {
+export interface Logger {
   info: (...args: unknown[]) => void;
   warn: (...args: unknown[]) => void;
   error: (...args: unknown[]) => void;

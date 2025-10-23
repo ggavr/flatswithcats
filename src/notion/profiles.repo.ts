@@ -2,6 +2,7 @@ import { notion, DB, handleNotionError } from './notionClient';
 import type { Profile } from '../core/types';
 import { log } from '../core/logger';
 import { DependencyError } from '../core/errors';
+import { createCache } from '../core/cache';
 
 const text = (value?: string | null) => {
   if (!value) return [];
@@ -20,6 +21,13 @@ const REQUIRED_PROPERTIES: Record<string, { rich_text: Record<string, never> }> 
 };
 
 let cachedProfileProperties: Set<string> | null = null;
+const PROFILE_CACHE_TTL_MS = 60_000;
+
+const profileByTgIdCache = createCache<number, Profile & { id: string }>({
+  ttlMs: PROFILE_CACHE_TTL_MS,
+  maxSize: 500,
+  logContext: 'profiles:tgId'
+});
 
 const ensureProfilesSchema = async (): Promise<Set<string>> => {
   if (cachedProfileProperties) return cachedProfileProperties;
@@ -116,19 +124,25 @@ export const profilesRepo = {
     try {
       if (existing?.id) {
         const page = await notion.pages.update({ page_id: existing.id, properties } as any);
-        return toProfile(page);
+        const stored = toProfile(page);
+        profileByTgIdCache.set(stored.tgId, stored);
+        return stored;
       }
       const page = await notion.pages.create({
         parent: { database_id: DB.profiles },
         properties
       } as any);
-      return toProfile(page);
+      const stored = toProfile(page);
+      profileByTgIdCache.set(stored.tgId, stored);
+      return stored;
     } catch (error) {
       return handleNotionError(error, { tgId: profile.tgId, op: 'profiles.upsert' });
     }
   },
 
   async findByTgId(tgId: number): Promise<(Profile & { id: string }) | null> {
+    const cached = profileByTgIdCache.get(tgId);
+    if (cached) return cached;
     try {
       const response: any = await (notion as any).databases.query({
         database_id: DB.profiles,
@@ -136,13 +150,18 @@ export const profilesRepo = {
         page_size: 1
       });
       const page = response.results?.[0];
-      return page ? toProfile(page) : null;
+      const stored = page ? toProfile(page) : null;
+      if (stored) {
+        profileByTgIdCache.set(stored.tgId, stored);
+      }
+      return stored;
     } catch (error) {
       return handleNotionError(error, { tgId, op: 'profiles.findByTgId' });
     }
   },
 
   async updateChannelMessage(tgId: number, messageId: number) {
+    profileByTgIdCache.delete(tgId);
     const existing = await this.findByTgId(tgId);
     if (!existing?.id) return;
     try {
@@ -150,6 +169,7 @@ export const profilesRepo = {
         page_id: existing.id,
         properties: { channelMessageId: { number: messageId } }
       });
+      profileByTgIdCache.set(tgId, { ...existing, channelMessageId: messageId });
     } catch (error) {
       handleNotionError(error, { tgId, op: 'profiles.updateChannelMessage' });
     }
