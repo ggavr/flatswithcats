@@ -1,12 +1,12 @@
 import type { CSSProperties } from 'react';
 
 export const cardStyle: CSSProperties = {
-  background: 'rgba(15, 23, 42, 0.65)',
-  borderRadius: 16,
+  background: '#ffffff',
+  borderRadius: 12,
   padding: 24,
-  border: '1px solid rgba(148, 163, 184, 0.15)',
-  marginBottom: 24,
-  backdropFilter: 'blur(12px)'
+  border: '1px solid #e4e4e7',
+  boxShadow: '0 4px 12px rgba(15, 15, 15, 0.04)',
+  marginBottom: 24
 };
 
 export const labelStyle: CSSProperties = {
@@ -14,16 +14,16 @@ export const labelStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 500,
   marginBottom: 6,
-  color: '#bae6fd'
+  color: '#2f3437'
 };
 
 export const fieldStyle: CSSProperties = {
   width: '100%',
   padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid rgba(148, 163, 184, 0.3)',
-  background: 'rgba(15, 23, 42, 0.35)',
-  color: '#f8fafc',
+  borderRadius: 8,
+  border: '1px solid #d4d4d8',
+  background: '#ffffff',
+  color: '#1f2933',
   fontSize: 15,
   boxSizing: 'border-box'
 };
@@ -34,31 +34,37 @@ export const textareaStyle: CSSProperties = {
   resize: 'vertical'
 };
 
-export const buttonStyle: CSSProperties = {
-  border: 'none',
-  borderRadius: 12,
-  padding: '12px 18px',
-  fontSize: 15,
+const baseButton: CSSProperties = {
+  borderRadius: 8,
+  border: '1px solid #111827',
+  padding: '10px 16px',
+  fontSize: 14,
   fontWeight: 600,
   cursor: 'pointer',
-  background: 'linear-gradient(135deg, #38bdf8, #6366f1)',
-  color: '#0f172a',
-  transition: 'transform 0.15s ease'
+  background: '#111827',
+  color: '#ffffff',
+  transition: 'background 0.2s ease, color 0.2s ease, border 0.2s ease'
+};
+
+export const buttonStyle: CSSProperties = {
+  ...baseButton
 };
 
 export const secondaryButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: 'rgba(148, 163, 184, 0.2)',
-  color: '#e2e8f0',
-  border: '1px solid rgba(148, 163, 184, 0.35)'
+  ...baseButton,
+  background: '#ffffff',
+  color: '#111827',
+  border: '1px solid #d4d4d8'
 };
 
 export const successButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: 'linear-gradient(135deg, #22c55e, #14b8a6)'
+  ...baseButton,
+  background: '#0f7a6c',
+  border: '1px solid #0f7a6c'
 };
 
 export const publishButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: 'linear-gradient(135deg, #f97316, #ec4899)'
+  ...baseButton,
+  background: '#2563eb',
+  border: '1px solid #2563eb'
 };

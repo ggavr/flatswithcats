@@ -121,7 +121,11 @@ export const ListingForm = ({
           />
           <button
             type="button"
-            style={secondaryButtonStyle}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: disabled ? 0.55 : 1,
+              cursor: disabled ? 'default' : 'pointer'
+            }}
             onClick={() => apartmentPhotoInputRef.current?.click()}
             disabled={disabled}
           >
@@ -132,7 +136,7 @@ export const ListingForm = ({
               href={value.apartmentPhotoUrl}
               target="_blank"
               rel="noreferrer"
-              style={{ fontSize: 13, color: '#38bdf8' }}
+              style={{ fontSize: 13, color: '#2563eb' }}
             >
               Открыть фото
             </a>
@@ -176,10 +180,20 @@ export const ListingForm = ({
       </label>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 4 }}>
-        <button type="button" style={buttonStyle} onClick={onPreview} disabled={disabled}>
+        <button
+          type="button"
+          style={{ ...buttonStyle, opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : 'pointer' }}
+          onClick={onPreview}
+          disabled={disabled}
+        >
           {loading ? 'Готовим…' : 'Предпросмотр'}
         </button>
-        <button type="button" style={successButtonStyle} onClick={onPublish} disabled={disabled}>
+        <button
+          type="button"
+          style={{ ...successButtonStyle, opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : 'pointer' }}
+          onClick={onPublish}
+          disabled={disabled}
+        >
           {loading ? 'Публикуем…' : 'Опубликовать'}
         </button>
       </div>

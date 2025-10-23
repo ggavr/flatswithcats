@@ -73,7 +73,13 @@ export default function TelegramMiniAppPage() {
   const handleApiError = (reason: unknown, fallback: string) => {
     if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
       setSessionReady(false);
-      setError('Сессия Telegram устарела. Закрой и заново открой мини‑эпп через кнопки бота.');
+      api.auth.clear();
+      setInitData(null);
+      setError(
+        api.auth.hasInitData()
+          ? 'Не удалось обновить сессию Telegram. Закрой и заново открой мини‑эпп через бота.'
+          : 'Сессия Telegram отсутствует. Запусти мини‑эпп из Telegram ещё раз.'
+      );
       return;
     }
     const message = reason instanceof Error ? reason.message : fallback;
@@ -85,14 +91,14 @@ export default function TelegramMiniAppPage() {
     let cancelled = false;
 
     const bootstrap = async (init: string) => {
-      api.auth.reset();
+      api.auth.setInitData(init);
       setSessionReady(false);
       setInitData(init);
       setError(null);
       setStatus(null);
       setChannelInviteLink(null);
       try {
-        const { profile, preview, profileCompleted } = await api.fetchProfile({ initData: init });
+        const { profile, preview, profileCompleted } = await api.fetchProfile();
         if (cancelled) return;
         if (profile) {
           setProfileForm({
@@ -114,7 +120,6 @@ export default function TelegramMiniAppPage() {
         }
         setProfileCompleted(profileCompleted);
         setSessionReady(true);
-        setInitData(null);
       } catch (reason) {
         if (cancelled) return;
         handleApiError(reason, 'Не удалось загрузить анкету.');
@@ -159,6 +164,7 @@ export default function TelegramMiniAppPage() {
   const profileBusy = initializing || profileLoading || profilePublishing || catPhotoUploading;
   const listingBusy = initializing || listingLoading || apartmentPhotoUploading;
   const listingDisabled = listingBusy || !profileCompleted || !sessionReady;
+  const publishProfileDisabled = profileBusy || !sessionReady || !profileCompleted;
 
   const helperText = useMemo(() => {
     if (initializing) return 'Загружаем данные…';
@@ -301,18 +307,19 @@ export default function TelegramMiniAppPage() {
   };
 
   return (
-    <main style={{ maxWidth: 600, margin: '0 auto', padding: '32px 18px 96px', lineHeight: 1.5 }}>
+    <main style={{ maxWidth: 720, margin: '0 auto', padding: '48px 24px 120px', lineHeight: 1.6 }}>
       <header style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, marginBottom: 8 }}>Cats & Flats · Мини‑эпп</h1>
-        {helperText && <p style={{ opacity: 0.7, fontSize: 14 }}>{helperText}</p>}
+        <h1 style={{ fontSize: 32, marginBottom: 12, color: '#1f2933' }}>Cats & Flats · Мини‑эпп</h1>
+        {helperText && <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>{helperText}</p>}
       </header>
 
       {error && (
         <div
           style={{
             ...cardStyle,
-            background: 'rgba(127, 29, 29, 0.55)',
-            border: '1px solid rgba(248, 113, 113, 0.45)',
+            background: '#fff5f5',
+            border: '1px solid #fca5a5',
+            color: '#7f1d1d',
             marginBottom: 24
           }}
         >
@@ -325,8 +332,9 @@ export default function TelegramMiniAppPage() {
         <div
           style={{
             ...cardStyle,
-            background: 'rgba(22, 101, 52, 0.45)',
-            border: '1px solid rgba(134, 239, 172, 0.45)',
+            background: '#f4fbf7',
+            border: '1px solid #bbf7d0',
+            color: '#14532d',
             marginBottom: 24
           }}
         >
@@ -340,7 +348,7 @@ export default function TelegramMiniAppPage() {
               style={{
                 display: 'inline-block',
                 marginTop: 8,
-                color: '#22d3ee',
+                color: '#0f766e',
                 fontWeight: 600
               }}
             >
@@ -365,9 +373,13 @@ export default function TelegramMiniAppPage() {
         <div style={{ marginTop: 16 }}>
           <button
             type="button"
-            style={{ ...publishButtonStyle, opacity: profileCompleted ? 1 : 0.5 }}
+            style={{
+              ...publishButtonStyle,
+              opacity: publishProfileDisabled ? 0.6 : 1,
+              cursor: publishProfileDisabled ? 'default' : 'pointer'
+            }}
             onClick={publishProfileAction}
-            disabled={profileBusy || !sessionReady || !profileCompleted}
+            disabled={publishProfileDisabled}
           >
             {profilePublishing ? 'Публикуем…' : 'Опубликовать анкету'}
           </button>
@@ -378,13 +390,15 @@ export default function TelegramMiniAppPage() {
             <h3 style={{ fontSize: 16, marginBottom: 8, opacity: 0.85 }}>Предпросмотр для канала</h3>
             <pre
               style={{
-                background: 'rgba(15, 23, 42, 0.8)',
-                borderRadius: 12,
+                background: '#f8fafc',
+                borderRadius: 10,
                 padding: 16,
-                border: '1px solid rgba(148, 163, 184, 0.2)',
+                border: '1px solid #e2e8f0',
+                color: '#1f2937',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
-                fontSize: 13
+                fontSize: 13,
+                fontFamily: '"Source Code Pro", "JetBrains Mono", monospace'
               }}
             >
               {profilePreview}
@@ -401,10 +415,10 @@ export default function TelegramMiniAppPage() {
               marginBottom: 16,
               padding: 16,
               borderRadius: 12,
-              border: '1px dashed rgba(148, 163, 184, 0.4)',
-              background: 'rgba(30, 41, 59, 0.45)',
+              border: '1px dashed #d4d4d8',
+              background: '#f9fafb',
               fontSize: 14,
-              opacity: 0.85
+              color: '#475569'
             }}
           >
             Сначала заполни и сохрани анкету. После этого появится возможность подготовить объявление.
@@ -427,13 +441,15 @@ export default function TelegramMiniAppPage() {
             <h3 style={{ fontSize: 16, marginBottom: 8, opacity: 0.85 }}>Предпросмотр объявления</h3>
             <pre
               style={{
-                background: 'rgba(15, 23, 42, 0.8)',
-                borderRadius: 12,
+                background: '#f8fafc',
+                borderRadius: 10,
                 padding: 16,
-                border: '1px solid rgba(148, 163, 184, 0.2)',
+                border: '1px solid #e2e8f0',
+                color: '#1f2937',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
-                fontSize: 13
+                fontSize: 13,
+                fontFamily: '"Source Code Pro", "JetBrains Mono", monospace'
               }}
             >
               {listingPreview}

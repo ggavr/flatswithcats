@@ -115,7 +115,11 @@ export const ProfileForm = ({
           />
           <button
             type="button"
-            style={secondaryButtonStyle}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: disabled ? 0.55 : 1,
+              cursor: disabled ? 'default' : 'pointer'
+            }}
             onClick={() => catPhotoInputRef.current?.click()}
             disabled={disabled}
           >
@@ -126,7 +130,7 @@ export const ProfileForm = ({
               href={value.catPhotoUrl}
               target="_blank"
               rel="noreferrer"
-              style={{ fontSize: 13, color: '#38bdf8' }}
+              style={{ fontSize: 13, color: '#2563eb' }}
             >
               Открыть фото
             </a>
@@ -137,12 +141,16 @@ export const ProfileForm = ({
             <img
               src={value.catPhotoUrl}
               alt="Фото кота"
-              style={{ maxWidth: '100%', borderRadius: 12, border: '1px solid rgba(148, 163, 184, 0.2)' }}
+              style={{ maxWidth: '100%', borderRadius: 12, border: '1px solid #e4e4e7' }}
             />
           </div>
         )}
       </div>
-      <button type="submit" style={buttonStyle} disabled={disabled}>
+      <button
+        type="submit"
+        style={{ ...buttonStyle, opacity: disabled ? 0.6 : 1, cursor: disabled ? 'default' : 'pointer' }}
+        disabled={disabled}
+      >
         {loading ? 'Сохраняем…' : submitLabel}
       </button>
     </form>

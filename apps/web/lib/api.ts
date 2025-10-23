@@ -15,15 +15,13 @@ const SESSION_HEADER = 'x-auth-token';
 const AUTH_HEADER = 'Authorization';
 
 let sessionToken: string | null = null;
+let initDataCache: string | null = null;
+let refreshPromise: Promise<void> | null = null;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public code?: string) {
     super(message);
   }
-}
-
-export interface AuthOptions {
-  initData?: string | null;
 }
 
 interface ApiErrorPayload {
@@ -53,21 +51,29 @@ const toHeaders = (input?: HeadersInit): Headers => {
   return headers;
 };
 
-const buildHeaders = (auth: AuthOptions | undefined, extra?: HeadersInit): Headers => {
+type AuthMode = 'auto' | 'initDataOnly';
+
+const buildHeaders = (mode: AuthMode, extra?: HeadersInit): Headers => {
   const headers = toHeaders(extra);
+  if (mode === 'initDataOnly') {
+    if (!initDataCache) {
+      throw new ApiError(401, 'Сессия Telegram не найдена. Перезапусти мини‑эпп.');
+    }
+    headers.set(INIT_DATA_HEADER, initDataCache);
+    return headers;
+  }
   if (sessionToken) {
     headers.set(AUTH_HEADER, `Bearer ${sessionToken}`);
     return headers;
   }
-  const initData = auth?.initData;
-  if (initData && initData.trim().length > 0) {
-    headers.set(INIT_DATA_HEADER, initData);
+  if (initDataCache) {
+    headers.set(INIT_DATA_HEADER, initDataCache);
     return headers;
   }
   throw new ApiError(401, 'Сессия Telegram не инициализирована. Перезапусти мини‑эпп.');
 };
 
-const handleError = async (response: Response): Promise<never> => {
+const parseError = async (response: Response): Promise<ApiError> => {
   let message = `${response.status} ${response.statusText}`;
   let code: string | undefined;
   try {
@@ -77,20 +83,21 @@ const handleError = async (response: Response): Promise<never> => {
   } catch (error) {
     // ignore JSON parse failures
   }
-  if (response.status === 401 || response.status === 403) {
-    sessionToken = null;
-  }
-  throw new ApiError(response.status, message, code);
+  return new ApiError(response.status, message, code);
 };
 
-const request = async <T>(path: string, init?: RequestInit, auth?: AuthOptions): Promise<T> => {
+const internalRequest = async <T>(
+  path: string,
+  init: RequestInit | undefined,
+  mode: AuthMode
+): Promise<T> => {
   const url = `${API_BASE_URL}${path}`;
   const response = await fetch(url, {
     ...init,
-    headers: buildHeaders(auth, init?.headers)
+    headers: buildHeaders(mode, init?.headers)
   });
   if (!response.ok) {
-    await handleError(response);
+    throw await parseError(response);
   }
   const token = response.headers.get(SESSION_HEADER);
   if (token) {
@@ -102,12 +109,44 @@ const request = async <T>(path: string, init?: RequestInit, auth?: AuthOptions):
   return (await response.json()) as T;
 };
 
-const jsonRequest = async <T>(
-  path: string,
-  body: unknown,
-  method: 'POST' | 'PUT',
-  auth?: AuthOptions
-) =>
+const refreshSession = async () => {
+  if (!initDataCache) {
+    throw new ApiError(401, 'Telegram не передал данные авторизации. Перезапусти мини‑эпп.');
+  }
+  if (!refreshPromise) {
+    const attempt = (async () => {
+      sessionToken = null;
+      await internalRequest('/api/profile', undefined, 'initDataOnly');
+    })();
+    refreshPromise = attempt
+      .catch((error) => {
+        sessionToken = null;
+        throw error;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+};
+
+const request = async <T>(path: string, init?: RequestInit, options?: { retry?: boolean }): Promise<T> => {
+  try {
+    return await internalRequest<T>(path, init, 'auto');
+  } catch (error) {
+    if (
+      !options?.retry &&
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      await refreshSession();
+      return internalRequest<T>(path, init, 'auto');
+    }
+    throw error;
+  }
+};
+
+const jsonRequest = async <T>(path: string, body: unknown, method: 'POST' | 'PUT') =>
   request<T>(
     path,
     {
@@ -116,47 +155,53 @@ const jsonRequest = async <T>(
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(body)
-    },
-    auth
+    }
   );
 
 export const api = {
   auth: {
-    reset() {
+    setInitData(value: string | null | undefined) {
+      const trimmed = value?.trim();
+      initDataCache = trimmed && trimmed.length > 0 ? trimmed : null;
       sessionToken = null;
     },
-    hasToken() {
+    clear() {
+      initDataCache = null;
+      sessionToken = null;
+    },
+    hasSession() {
       return sessionToken !== null;
+    },
+    hasInitData() {
+      return Boolean(initDataCache);
+    },
+    getToken() {
+      return sessionToken;
     }
   },
 
-  fetchProfile: (auth: AuthOptions) => request<ProfileResponse>('/api/profile', undefined, auth),
+  fetchProfile: () => request<ProfileResponse>('/api/profile'),
 
-  saveProfile: (payload: SaveProfilePayload, auth?: AuthOptions) =>
-    jsonRequest<ProfileResponse>('/api/profile', payload, 'PUT', auth),
+  saveProfile: (payload: SaveProfilePayload) => jsonRequest<ProfileResponse>('/api/profile', payload, 'PUT'),
 
-  previewListing: (payload: ListingDraftPayload, auth?: AuthOptions) =>
-    jsonRequest<ListingPreviewResponse>('/api/listings/preview', payload, 'POST', auth),
+  previewListing: (payload: ListingDraftPayload) =>
+    jsonRequest<ListingPreviewResponse>('/api/listings/preview', payload, 'POST'),
 
-  createListing: (payload: ListingDraftPayload & { publish?: boolean }, auth?: AuthOptions) =>
-    jsonRequest<CreateListingResponse>('/api/listings', payload, 'POST', auth),
+  createListing: (payload: ListingDraftPayload & { publish?: boolean }) =>
+    jsonRequest<CreateListingResponse>('/api/listings', payload, 'POST'),
 
-  publishListing: (listingId: string, auth?: AuthOptions) =>
-    request<PublishListingResponse>(`/api/listings/${listingId}/publish`, { method: 'POST' }, auth),
+  publishListing: (listingId: string) =>
+    request<PublishListingResponse>(`/api/listings/${listingId}/publish`, { method: 'POST' }),
 
-  publishProfile: (auth?: AuthOptions) =>
-    request<PublishProfileResponse>('/api/profile/publish', { method: 'POST' }, auth),
+  publishProfile: () =>
+    request<PublishProfileResponse>('/api/profile/publish', { method: 'POST' }),
 
-  uploadPhoto: (file: File, auth?: AuthOptions) => {
+  uploadPhoto: (file: File) => {
     const body = new FormData();
     body.append('file', file);
-    return request<MediaUploadResponse>(
-      '/api/media/photo',
-      {
-        method: 'POST',
-        body
-      },
-      auth
-    );
+    return request<MediaUploadResponse>('/api/media/photo', {
+      method: 'POST',
+      body
+    });
   }
 };
