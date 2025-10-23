@@ -112,37 +112,60 @@ export default function TelegramMiniAppPage() {
   const apartmentPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    prepareTelegramWebApp();
-    const data = getTelegramInitData();
-    if (!data) {
-      const message = isTelegramEnvironment()
-        ? 'Не удалось получить initData от Telegram. Попробуйте перезапустить мини‑эпп.'
-        : 'Мини‑эпп доступно только внутри Telegram.';
-      setError(message);
-      setInitializing(false);
-      return;
-    }
-    setInitData(data);
-    api
-      .fetchProfile(data)
-      .then(({ profile, preview }) => {
-        if (profile) {
-          setProfileForm({
-            name: profile.name,
-            location: `${profile.city}, ${profile.country}`.trim(),
-            intro: profile.intro,
-            catName: profile.catName,
-            catPhotoId: profile.catPhotoId,
-            catPhotoUrl: profile.catPhotoUrl ?? ''
-          });
-          setProfilePreview(preview ?? null);
-        }
-      })
-      .catch((reason) => {
-        const message = reason instanceof Error ? reason.message : 'Не удалось загрузить анкету.';
-        setError(message);
-      })
-      .finally(() => setInitializing(false));
+    let retryTimeout: number | undefined;
+
+    const bootstrap = (initData: string) => {
+      setInitData(initData);
+      api
+        .fetchProfile(initData)
+        .then(({ profile, preview }) => {
+          if (profile) {
+            setProfileForm({
+              name: profile.name,
+              location: `${profile.city}, ${profile.country}`.trim(),
+              intro: profile.intro,
+              catName: profile.catName,
+              catPhotoId: profile.catPhotoId,
+              catPhotoUrl: profile.catPhotoUrl ?? ''
+            });
+            setProfilePreview(preview ?? null);
+          }
+        })
+        .catch((reason) => {
+          const message = reason instanceof Error ? reason.message : 'Не удалось загрузить анкету.';
+          setError(message);
+        })
+        .finally(() => setInitializing(false));
+    };
+
+    const attemptInit = () => {
+      prepareTelegramWebApp();
+      const data = getTelegramInitData();
+      if (data) {
+        bootstrap(data);
+        return;
+      }
+      if (isTelegramEnvironment()) {
+        retryTimeout = window.setTimeout(() => {
+          const retryData = getTelegramInitData();
+          if (retryData) {
+            bootstrap(retryData);
+          } else {
+            setError('Не удалось получить initData от Telegram. Попробуйте перезапустить мини‑эпп.');
+            setInitializing(false);
+          }
+        }, 400);
+      } else {
+        setError('Мини‑эпп доступно только внутри Telegram.');
+        setInitializing(false);
+      }
+    };
+
+    attemptInit();
+
+    return () => {
+      if (retryTimeout) window.clearTimeout(retryTimeout);
+    };
   }, []);
 
   const handleProfileChange = (field: keyof ProfileFormState) =>
