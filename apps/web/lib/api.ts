@@ -9,7 +9,7 @@ import type {
   SaveProfilePayload
 } from './types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://cats-flats-api.onrender.com';
 const INIT_DATA_HEADER = 'X-Telegram-Init-Data';
 
 const buildHeaders = (initData: string, extra?: HeadersInit): HeadersInit => ({

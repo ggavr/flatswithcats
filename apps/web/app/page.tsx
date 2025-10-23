@@ -151,7 +151,7 @@ export default function HomePage() {
           <div className={styles.communityActions}>
             <a
               className={styles.button}
-              href="https://t.me/flatsforcatsbot"
+              href="https://t.me/flatsandcats_bot"
               target="_blank"
               rel="noreferrer"
             >
