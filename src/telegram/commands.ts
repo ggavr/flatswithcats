@@ -1,5 +1,6 @@
 import { Markup, Telegraf } from 'telegraf';
-import type { Context, InlineQueryResult } from 'telegraf';
+import type { Context } from 'telegraf';
+import type { InlineQueryResult } from 'telegraf/typings/core/types/typegram';
 import { kb } from './keyboards';
 import { templates } from '../domain/templates';
 import { cfg } from '../core/config';

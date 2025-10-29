@@ -81,6 +81,8 @@ export const createServer = ({ telegram }: HttpServerDeps): AppFastifyInstance =
 
   server.get('/healthz', async () => ({ status: 'ok' }));
 
+  server.get('/', async () => ({ name: 'Cats & Flats API', status: 'ok' }));
+
   server.setErrorHandler((error, request, reply) => {
     const appError = toAppError(error);
     const status = (() => {
