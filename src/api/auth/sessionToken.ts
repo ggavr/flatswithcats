@@ -5,7 +5,7 @@ import type { TelegramInitUser } from './telegram';
 
 const SESSION_TOKEN_SALT = 'SessionToken';
 const TOKEN_VERSION = 'v1';
-const SESSION_TTL_SECONDS = 3600;
+const SESSION_TTL_SECONDS = 30 * 24 * 3600; // 30 days
 
 const secret = crypto.createHmac('sha256', SESSION_TOKEN_SALT).update(cfg.botToken).digest();
 

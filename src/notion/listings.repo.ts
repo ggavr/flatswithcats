@@ -1,28 +1,16 @@
-import { notion, DB, handleNotionError } from './notionClient';
+import { notion, DB, handleNotionError, withNotionRetry } from './notionClient';
+import { text, parseRichText, parseNumber, buildRichTextProperty, buildNumberProperty, buildTitleProperty } from './notionUtils';
+import type {
+  NotionPage,
+  NotionPageCreateRequest,
+  NotionPageUpdateRequest,
+  NotionDatabaseQueryRequest,
+  NotionDatabaseQueryResponse
+} from './notionTypes';
 import type { Listing } from '../core/types';
 import { DependencyError } from '../core/errors';
 import { log } from '../core/logger';
 import { createCache } from '../core/cache';
-
-type NotionProperty = {
-  rich_text?: Array<{ plain_text?: string | null }>;
-  number?: number | null;
-};
-
-type NotionPage = {
-  id: string;
-  properties?: Record<string, NotionProperty>;
-  created_time?: string;
-  last_edited_time?: string;
-};
-
-const text = (value?: string | null) => {
-  if (!value) return [];
-  return [{ type: 'text', text: { content: value.toString().slice(0, 1900) } }];
-};
-
-const parseRichText = (prop: any) => prop?.rich_text?.[0]?.plain_text ?? '';
-const parseNumber = (prop: any) => (typeof prop?.number === 'number' ? prop.number : undefined);
 
 const listingsRepoLog = log.withContext({ scope: 'listingsRepo' });
 
@@ -103,9 +91,18 @@ const ensureListingsSchema = async (): Promise<Set<string>> => {
 
 const toListing = (page: NotionPage): StoredListing => {
   const props = page?.properties ?? {};
+  
+  // Helper to safely extract number from property
+  const getNumber = (prop: any): number | undefined => {
+    if (prop && 'number' in prop) {
+      return typeof prop.number === 'number' ? prop.number : undefined;
+    }
+    return undefined;
+  };
+  
   return {
     id: page.id,
-    ownerTgId: props.tgId?.number ?? 0,
+    ownerTgId: getNumber(props.tgId) ?? 0,
     profileId: parseRichText(props.profileId),
     name: parseRichText(props.name),
     city: parseRichText(props.city),
@@ -118,7 +115,7 @@ const toListing = (page: NotionPage): StoredListing => {
     conditions: parseRichText(props.conditions),
     dates: parseRichText(props.dates),
     preferredDestinations: parseRichText(props.preferredDestinations),
-    channelMessageId: parseNumber(props.channelMessageId),
+    channelMessageId: getNumber(props.channelMessageId),
     createdAt: typeof page?.created_time === 'string' ? page.created_time : new Date().toISOString(),
     updatedAt: typeof page?.last_edited_time === 'string' ? page.last_edited_time : new Date().toISOString()
   };
@@ -146,11 +143,18 @@ export const listingsRepo = {
   async create(listing: Listing): Promise<StoredListing> {
     try {
       await ensureListingsSchema();
-      const page = await notion.pages.create({
-        parent: { database_id: DB.listings },
-        properties: buildProperties(listing)
-      } as any);
-      const stored = toListing(page as NotionPage);
+      
+      const stored = await withNotionRetry(
+        async () => {
+          const page = await notion.pages.create({
+            parent: { database_id: DB.listings },
+            properties: buildProperties(listing)
+          } as any);
+          return toListing(page as NotionPage);
+        },
+        { tgId: listing.ownerTgId, op: 'listings.create' }
+      );
+      
       listingByIdCache.set(stored.id, stored);
       listingsByOwnerCache.delete(stored.ownerTgId);
       return stored;
@@ -162,10 +166,15 @@ export const listingsRepo = {
   async updateChannelMessage(id: string, messageId: number) {
     try {
       const cached = listingByIdCache.get(id);
-      await notion.pages.update({
-        page_id: id,
-        properties: { channelMessageId: { number: messageId } }
-      });
+      
+      await withNotionRetry(
+        async () => notion.pages.update({
+          page_id: id,
+          properties: { channelMessageId: { number: messageId } }
+        } as any),
+        { id, op: 'listings.updateChannelMessage' }
+      );
+      
       listingByIdCache.delete(id);
       if (cached) {
         listingsByOwnerCache.delete(cached.ownerTgId);
@@ -178,8 +187,13 @@ export const listingsRepo = {
   async findById(id: string): Promise<StoredListing | null> {
     const cached = listingByIdCache.get(id);
     if (cached) return cached;
+    
     try {
-      const page = await notion.pages.retrieve({ page_id: id } as any);
+      const page = await withNotionRetry(
+        async () => notion.pages.retrieve({ page_id: id }) as Promise<NotionPage>,
+        { id, op: 'listings.findById' }
+      );
+      
       const stored = toListing(page as NotionPage);
       listingByIdCache.set(stored.id, stored);
       return stored;
@@ -191,14 +205,19 @@ export const listingsRepo = {
   async findByOwner(tgId: number): Promise<StoredListing[]> {
     const cached = listingsByOwnerCache.get(tgId);
     if (cached) return cached;
+    
     try {
-      const response: any = await (notion as any).databases.query({
-        database_id: DB.listings,
-        filter: { property: 'tgId', number: { equals: tgId } },
-        sorts: [{ timestamp: 'created_time', direction: 'descending' }],
-        page_size: 25
-      });
-      const results = Array.isArray(response.results) ? (response.results as NotionPage[]) : [];
+      const response = await withNotionRetry(
+        async () => notion.databases.query({
+          database_id: DB.listings,
+          filter: { property: 'tgId', number: { equals: tgId } },
+          sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+          page_size: 25
+        } as any) as Promise<NotionDatabaseQueryResponse>,
+        { tgId, op: 'listings.findByOwner' }
+      );
+      
+      const results = response.results || [];
       const mapped = results.map((page) => toListing(page));
       for (const item of mapped) {
         listingByIdCache.set(item.id, item);

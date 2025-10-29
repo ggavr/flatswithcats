@@ -20,8 +20,10 @@
   "dependencies": {
     "@fastify/cors": "^8.4.2",
     "@fastify/multipart": "^7.7.3",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^7.0.3",
     "@notionhq/client": "^2.3.0",
+    "chrono-node": "^2.9.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "telegraf": "^4.16.3"

@@ -28,30 +28,56 @@ export const registerMediaRoutes = async (server: AppFastifyInstance) => {
     }
 
     const filename = part.filename ?? 'photo.jpg';
+    
+    // Store the file locally first
+    const stored = await mediaStorage.save(buffer, filename, part.mimetype);
+    
+    // Upload to Telegram to get file_id
+    // We use a temporary chat (user's DM) but with better error handling
     let message;
+    let fileId: string;
+    
     try {
-      message = await server.telegram.sendPhoto(tgId, { source: buffer, filename }, { disable_notification: true });
-    } catch (error) {
-      mediaLog.error('Не удалось загрузить фото через Telegram', error);
-      return reply.code(400).send({
-        error: 'DEPENDENCY',
-        message: 'Telegram отклонил фото. Убедись, что бот имеет право писать тебе в личные сообщения.'
+      // Try to send to user's DM
+      message = await server.telegram.sendPhoto(
+        tgId, 
+        { source: buffer, filename }, 
+        { 
+          disable_notification: true,
+          caption: '📸 Фото загружено (это сообщение будет удалено)'
+        }
+      );
+      
+      const photos = message.photo ?? [];
+      const best = photos[photos.length - 1];
+      if (!best?.file_id) {
+        throw new Error('Telegram не вернул file_id');
+      }
+      fileId = best.file_id;
+      
+      // Try to delete the temporary message (non-critical)
+      try {
+        await server.telegram.deleteMessage(tgId, message.message_id);
+      } catch (deleteError) {
+        // Log but don't fail - user can delete manually
+        mediaLog.warn('Не удалось удалить временное фото (пользователь может удалить вручную)', { 
+          tgId, 
+          messageId: message.message_id,
+          error: deleteError 
+        });
+      }
+    } catch (uploadError) {
+      mediaLog.error('Не удалось загрузить фото через Telegram', { tgId, error: uploadError });
+      
+      // If Telegram upload fails, we still have the file stored locally
+      // Return the URL but without file_id (can still be used for web display)
+      return reply.send({ 
+        fileId: null, 
+        url: stored.url,
+        warning: 'Фото сохранено, но не удалось получить Telegram file_id. Используй фото только для предпросмотра в веб-интерфейсе.'
       });
     }
-    const photos = message.photo ?? [];
-    const best = photos[photos.length - 1];
-    if (!best?.file_id) {
-      throw new Error('Telegram не вернул file_id');
-    }
 
-    try {
-      await server.telegram.deleteMessage(tgId, message.message_id);
-    } catch (error) {
-      mediaLog.warn('Не удалось удалить временное фото', error);
-    }
-
-    const stored = await mediaStorage.save(buffer, filename, part.mimetype);
-
-    return reply.send({ fileId: best.file_id, url: stored.url });
+    return reply.send({ fileId, url: stored.url });
   });
 };

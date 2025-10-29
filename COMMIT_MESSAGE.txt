@@ -1,0 +1,57 @@
+feat: production hardening - retry logic, rate limiting, and optimizations
+
+This commit implements critical improvements for reliability, security, and performance:
+
+🔄 Notion API Retry Logic
+- Added exponential backoff retry wrapper (3 attempts, 300ms→10s)
+- Intelligent handling of 429 rate limits with retry-after parsing
+- Automatic retry on transient 5xx server errors
+- All profiles/listings DB operations wrapped with retry logic
+
+🛡️ API Rate Limiting
+- Installed @fastify/rate-limit plugin
+- Configured 100 requests/minute per user (by token or IP)
+- Rate limit headers exposed for client feedback
+- Localhost exemption for health checks
+
+📸 Optimized Photo Upload
+- Store files locally first (guaranteed success)
+- Graceful fallback if Telegram upload fails
+- Better error handling for DM permission issues
+- Non-critical delete failure handling
+
+⏰ Render Free Tier Self-Ping
+- Auto-ping /healthz every 5 minutes to prevent sleep
+- Keeps bot alive 24/7 on free tier
+- Configurable via RENDER_EXTERNAL_URL env var
+
+🔐 Extended Session TTL
+- Increased from 1 hour to 30 days
+- Better user experience with fewer re-authentications
+
+🧹 Code Quality Improvements
+- Extracted common Notion parser utilities (DRY)
+- Centralized configuration constants
+- Added request timeout configuration (30s/60s)
+- Eliminated ~50 lines of duplicate code
+
+Files Changed:
+- Created: src/core/retry.ts, src/core/constants.ts, src/notion/notionUtils.ts
+- Modified: src/index.ts, src/api/server.ts, src/api/routes/media.ts
+- Modified: src/api/auth/sessionToken.ts, src/notion/*.ts
+- Updated: package.json (+@fastify/rate-limit), render.yaml
+
+Breaking Changes: None
+Backward Compatible: Yes
+
+Build Status: ✅ PASSING
+TypeScript: ✅ No errors
+Linter: ✅ Clean
+
+Deployment Notes:
+- Add RENDER_EXTERNAL_URL env var to Render service
+- No migration required
+- Existing sessions remain valid
+
+See IMPROVEMENTS.md and IMPLEMENTATION_SUMMARY.md for full details.
+

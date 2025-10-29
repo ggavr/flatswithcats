@@ -1,16 +1,16 @@
-import { notion, DB, handleNotionError } from './notionClient';
+import { notion, DB, handleNotionError, withNotionRetry } from './notionClient';
+import { text, parseRichText, parseNumber, buildRichTextProperty, buildNumberProperty, buildTitleProperty } from './notionUtils';
+import type { 
+  NotionPage, 
+  NotionPageCreateRequest, 
+  NotionPageUpdateRequest,
+  NotionDatabaseQueryRequest,
+  NotionDatabaseQueryResponse 
+} from './notionTypes';
 import type { Profile } from '../core/types';
 import { log } from '../core/logger';
 import { DependencyError } from '../core/errors';
 import { createCache } from '../core/cache';
-
-const text = (value?: string | null) => {
-  if (!value) return [];
-  return [{ type: 'text', text: { content: value.toString().slice(0, 1900) } }];
-};
-
-const parseRichText = (prop: any) => prop?.rich_text?.[0]?.plain_text ?? '';
-const parseNumber = (prop: any) => (typeof prop?.number === 'number' ? prop.number : undefined);
 
 const profilesRepoLog = log.withContext({ scope: 'profilesRepo' });
 
@@ -121,18 +121,23 @@ export const profilesRepo = {
     const existing = await this.findByTgId(profile.tgId);
     const availableProps = await ensureProfilesSchema();
     const properties = buildProperties(profile, availableProps);
+    
     try {
-      if (existing?.id) {
-        const page = await notion.pages.update({ page_id: existing.id, properties } as any);
-        const stored = toProfile(page);
-        profileByTgIdCache.set(stored.tgId, stored);
-        return stored;
-      }
-      const page = await notion.pages.create({
-        parent: { database_id: DB.profiles },
-        properties
-      } as any);
-      const stored = toProfile(page);
+      const stored = await withNotionRetry(async () => {
+        if (existing?.id) {
+          const page = await notion.pages.update({ 
+            page_id: existing.id, 
+            properties 
+          } as any);
+          return toProfile(page as NotionPage);
+        }
+        const page = await notion.pages.create({
+          parent: { database_id: DB.profiles },
+          properties
+        } as any);
+        return toProfile(page as NotionPage);
+      }, { tgId: profile.tgId, op: 'profiles.upsert' });
+      
       profileByTgIdCache.set(stored.tgId, stored);
       return stored;
     } catch (error) {
@@ -143,12 +148,17 @@ export const profilesRepo = {
   async findByTgId(tgId: number): Promise<(Profile & { id: string }) | null> {
     const cached = profileByTgIdCache.get(tgId);
     if (cached) return cached;
+    
     try {
-      const response: any = await (notion as any).databases.query({
-        database_id: DB.profiles,
-        filter: { property: 'tgId', number: { equals: tgId } },
-        page_size: 1
-      });
+      const response = await withNotionRetry(
+        async () => notion.databases.query({
+          database_id: DB.profiles,
+          filter: { property: 'tgId', number: { equals: tgId } },
+          page_size: 1
+        } as any) as Promise<NotionDatabaseQueryResponse>,
+        { tgId, op: 'profiles.findByTgId' }
+      );
+      
       const page = response.results?.[0];
       const stored = page ? toProfile(page) : null;
       if (stored) {
@@ -164,11 +174,15 @@ export const profilesRepo = {
     profileByTgIdCache.delete(tgId);
     const existing = await this.findByTgId(tgId);
     if (!existing?.id) return;
+    
     try {
-      await notion.pages.update({
-        page_id: existing.id,
-        properties: { channelMessageId: { number: messageId } }
-      });
+      await withNotionRetry(
+        async () => notion.pages.update({
+          page_id: existing.id,
+          properties: { channelMessageId: { number: messageId } }
+        }),
+        { tgId, op: 'profiles.updateChannelMessage' }
+      );
       profileByTgIdCache.set(tgId, { ...existing, channelMessageId: messageId });
     } catch (error) {
       handleNotionError(error, { tgId, op: 'profiles.updateChannelMessage' });
