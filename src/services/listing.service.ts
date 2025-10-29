@@ -70,5 +70,13 @@ export const listingService = {
 
   async listByOwner(ownerTgId: number) {
     return listingsRepo.findByOwner(ownerTgId);
+  },
+
+  async search(query?: string, limit?: number) {
+    return listingsRepo.searchPublished(query, limit);
+  },
+
+  async archive(listingId: string, ownerTgId: number) {
+    await listingsRepo.archive(listingId, ownerTgId);
   }
 };

@@ -199,6 +199,9 @@ export const api = {
   publishProfile: () =>
     request<PublishProfileResponse>('/api/profile/publish', { method: 'POST' }),
 
+  deleteListing: (listingId: string) =>
+    request<{ success: boolean }>(`/api/listings/${listingId}`, { method: 'DELETE' }),
+
   uploadPhoto: (file: File) => {
     const body = new FormData();
     body.append('file', file);

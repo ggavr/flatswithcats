@@ -48,6 +48,7 @@ export const cfg = {
   botToken: requireEnv('BOT_TOKEN'),
   channelId: requireEnv('CHANNEL_ID'),
   channelInviteLink: requireEnv('CHANNEL_INVITE_LINK'),
+  channelUsername: process.env.CHANNEL_USERNAME?.trim() ?? null,
   http: {
     host: process.env.API_HOST ?? '0.0.0.0',
     port: parsePort(process.env.API_PORT ?? '8080'),

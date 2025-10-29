@@ -16,6 +16,8 @@ export interface ProfileFormValue {
   intro: string;
   catPhotoId: string;
   catPhotoUrl: string;
+  city: string;
+  country: string;
 }
 
 export interface ProfileFormProps {
@@ -68,6 +70,32 @@ export const ProfileForm = ({
           disabled={disabled}
         />
       </label>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <label style={{ ...labelStyle, flex: 1, minWidth: 120 }}>
+          Город
+          <input
+            type="text"
+            value={value.city}
+            onChange={handleInputChange('city')}
+            required
+            style={fieldStyle}
+            placeholder="Барселона"
+            disabled={disabled}
+          />
+        </label>
+        <label style={{ ...labelStyle, flex: 1, minWidth: 140 }}>
+          Страна
+          <input
+            type="text"
+            value={value.country}
+            onChange={handleInputChange('country')}
+            required
+            style={fieldStyle}
+            placeholder="Испания"
+            disabled={disabled}
+          />
+        </label>
+      </div>
       <label style={labelStyle}>
         Имя кота
         <input

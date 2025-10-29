@@ -25,7 +25,8 @@ export interface ListingFormValue {
 export interface ListingFormProps {
   value: ListingFormValue;
   disabled?: boolean;
-  loading?: boolean;
+  isPreviewing?: boolean;
+  isPublishing?: boolean;
   uploading?: boolean;
   onChange: (field: keyof ListingFormValue, value: string) => void;
   onPreview: () => void;
@@ -36,7 +37,8 @@ export interface ListingFormProps {
 export const ListingForm = ({
   value,
   disabled = false,
-  loading = false,
+  isPreviewing = false,
+  isPublishing = false,
   uploading = false,
   onChange,
   onPreview,
@@ -186,7 +188,7 @@ export const ListingForm = ({
           onClick={onPreview}
           disabled={disabled}
         >
-          {loading ? 'Готовим…' : 'Предпросмотр'}
+          {isPreviewing ? 'Готовим…' : 'Предпросмотр'}
         </button>
         <button
           type="button"
@@ -194,7 +196,7 @@ export const ListingForm = ({
           onClick={onPublish}
           disabled={disabled}
         >
-          {loading ? 'Публикуем…' : 'Опубликовать'}
+          {isPublishing ? 'Публикуем…' : 'Опубликовать'}
         </button>
       </div>
     </div>

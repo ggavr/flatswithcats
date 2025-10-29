@@ -122,4 +122,17 @@ export const registerListingRoutes = async (server: AppFastifyInstance) => {
     await listingService.updateChannelMessage(id, messageId);
     return reply.send({ messageId, channelInviteLink: cfg.channelInviteLink });
   });
+
+  server.delete('/api/listings/:id', { preHandler: requireTelegramAuth }, async (request, reply) => {
+    const tgId = requireTelegramUserId(request);
+    const { id } = request.params as { id: string };
+    
+    const listing = await listingService.getById(id);
+    if (!listing || listing.ownerTgId !== tgId) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'Listing not found' });
+    }
+    
+    await listingService.archive(id, tgId);
+    return reply.send({ success: true });
+  });
 };

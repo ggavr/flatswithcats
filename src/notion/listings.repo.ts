@@ -227,5 +227,69 @@ export const listingsRepo = {
     } catch (error) {
       return handleNotionError(error, { tgId, op: 'listings.findByOwner' });
     }
+  },
+
+  async searchPublished(query?: string, limit = 50): Promise<StoredListing[]> {
+    try {
+      let filter: any = {
+        property: 'channelMessageId',
+        number: { is_not_empty: true }
+      };
+
+      // If query provided, search in city or country
+      // NOTE: Notion's rich_text.contains is case-sensitive, so we search
+      // with the original user input. For case-insensitive search, you'd need
+      // to store lowercase versions in separate fields.
+      if (query && query.trim()) {
+        const searchTerm = query.trim();
+        filter = {
+          and: [
+            { property: 'channelMessageId', number: { is_not_empty: true } },
+            {
+              or: [
+                { property: 'city', rich_text: { contains: searchTerm } },
+                { property: 'country', rich_text: { contains: searchTerm } }
+              ]
+            }
+          ]
+        };
+      }
+
+      const response = await withNotionRetry(
+        async () => notion.databases.query({
+          database_id: DB.listings,
+          filter,
+          sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+          page_size: limit
+        } as any) as Promise<NotionDatabaseQueryResponse>,
+        { op: 'listings.searchPublished', query }
+      );
+
+      const results = response.results || [];
+      const mapped = results.map((page) => toListing(page));
+      for (const item of mapped) {
+        listingByIdCache.set(item.id, item);
+      }
+      return mapped;
+    } catch (error) {
+      return handleNotionError(error, { op: 'listings.searchPublished', query });
+    }
+  },
+
+  async archive(id: string, ownerTgId: number) {
+    try {
+      await withNotionRetry(
+        async () => notion.pages.update({
+          page_id: id,
+          archived: true
+        } as any),
+        { id, tgId: ownerTgId, op: 'listings.archive' }
+      );
+      
+      listingByIdCache.delete(id);
+      listingsByOwnerCache.delete(ownerTgId);
+    } catch (error) {
+      return handleNotionError(error, { id, tgId: ownerTgId, op: 'listings.archive' });
+    }
   }
 };

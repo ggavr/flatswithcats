@@ -8,6 +8,18 @@ import type { ListingDraftPayload, ListingsIndexItem, SaveProfilePayload } from 
 import { ProfileForm, type ProfileFormValue } from '../../components/profile/ProfileForm';
 import { ListingForm, type ListingFormValue } from '../../components/listing/ListingForm';
 import { cardStyle, publishButtonStyle } from '../../components/ui/styles';
+import { draftStorage } from '@lib/drafts';
+import { 
+  trackSessionStart, 
+  trackProfileSave, 
+  trackProfilePublish, 
+  trackListingPreview, 
+  trackListingPublish,
+  trackListingDelete,
+  trackPhotoUpload,
+  trackDraftLoad,
+  trackError
+} from '@lib/analytics';
 
 type ProfileFormState = ProfileFormValue;
 type ListingFormState = ListingFormValue;
@@ -17,7 +29,9 @@ const initialProfileForm: ProfileFormState = {
   catName: '',
   intro: '',
   catPhotoId: '',
-  catPhotoUrl: ''
+  catPhotoUrl: '',
+  city: '',
+  country: ''
 };
 
 const initialListingForm: ListingFormState = {
@@ -31,13 +45,17 @@ const initialListingForm: ListingFormState = {
   preferredDestinations: ''
 };
 
-const buildProfilePayload = (form: ProfileFormState): SaveProfilePayload => ({
-  name: form.name,
-  catName: form.catName,
-  intro: form.intro,
-  catPhotoId: form.catPhotoId,
-  catPhotoUrl: form.catPhotoUrl || undefined
-});
+const buildProfilePayload = (form: ProfileFormState): SaveProfilePayload => {
+  const location = form.city && form.country ? `${form.city}, ${form.country}` : '';
+  return {
+    name: form.name,
+    catName: form.catName,
+    intro: form.intro,
+    catPhotoId: form.catPhotoId,
+    catPhotoUrl: form.catPhotoUrl || undefined,
+    location: location || undefined
+  };
+};
 
 const buildListingPayload = (form: ListingFormState): ListingDraftPayload => ({
   city: form.city,
@@ -66,10 +84,12 @@ export default function TelegramMiniAppPage() {
 
   const [listingForm, setListingForm] = useState<ListingFormState>(initialListingForm);
   const [listingPreview, setListingPreview] = useState<string | null>(null);
-  const [listingLoading, setListingLoading] = useState(false);
+  const [listingPreviewing, setListingPreviewing] = useState(false);
+  const [listingPublishing, setListingPublishing] = useState(false);
   const [apartmentPhotoUploading, setApartmentPhotoUploading] = useState(false);
   const [userListings, setUserListings] = useState<ListingsIndexItem[]>([]);
   const [listingsLoading, setListingsLoading] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
   const handleApiError = (reason: unknown, fallback: string) => {
     if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
@@ -106,7 +126,9 @@ export default function TelegramMiniAppPage() {
             catName: profile.catName,
             intro: profile.intro,
             catPhotoId: profile.catPhotoId,
-            catPhotoUrl: profile.catPhotoUrl ?? ''
+            catPhotoUrl: profile.catPhotoUrl ?? '',
+            city: profile.city ?? '',
+            country: profile.country ?? ''
           });
           setListingForm((prev) => ({
             ...prev,
@@ -120,6 +142,24 @@ export default function TelegramMiniAppPage() {
         }
         setProfileCompleted(profileCompleted);
         setSessionReady(true);
+        trackSessionStart();
+        
+        // Load draft if available
+        if (profileCompleted) {
+          const draft = draftStorage.load();
+          if (draft && !cancelled) {
+            setListingForm((prev) => ({
+              ...draft,
+              city: draft.city || prev.city,
+              country: draft.country || prev.country
+            }));
+            setHasDraft(true);
+            trackDraftLoad(true);
+          } else {
+            trackDraftLoad(false);
+          }
+        }
+        
         try {
           const listingsResponse = await api.fetchListings();
           if (!cancelled) {
@@ -132,6 +172,8 @@ export default function TelegramMiniAppPage() {
         }
       } catch (reason) {
         if (cancelled) return;
+        const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+        trackError('bootstrap', errorMessage);
         handleApiError(reason, 'Не удалось загрузить анкету.');
       } finally {
         if (!cancelled) {
@@ -172,7 +214,7 @@ export default function TelegramMiniAppPage() {
   }, []);
 
   const profileBusy = initializing || profileLoading || profilePublishing || catPhotoUploading;
-  const listingBusy = initializing || listingLoading || apartmentPhotoUploading;
+  const listingBusy = initializing || listingPreviewing || listingPublishing || apartmentPhotoUploading;
   const listingDisabled = listingBusy || !profileCompleted || !sessionReady;
   const publishProfileDisabled = profileBusy || !sessionReady || !profileCompleted;
 
@@ -190,7 +232,15 @@ export default function TelegramMiniAppPage() {
   };
 
   const handleListingChange = (field: keyof ListingFormState, value: string) => {
-    setListingForm((prev) => ({ ...prev, [field]: value }));
+    setListingForm((prev) => {
+      const updated = { ...prev, [field]: value };
+      // Auto-save draft
+      if (profileCompleted) {
+        draftStorage.save(updated);
+        setHasDraft(true);
+      }
+      return updated;
+    });
   };
 
   const formatTimestamp = (value: string) => {
@@ -227,6 +277,25 @@ export default function TelegramMiniAppPage() {
     }
   };
 
+  const deleteListingAction = async (listingId: string) => {
+    if (!sessionReady || !confirm('Удалить объявление? Это действие нельзя отменить.')) return;
+    
+    setError(null);
+    setStatus(null);
+    setChannelInviteLink(null);
+    
+    try {
+      await api.deleteListing(listingId);
+      setStatus('Объявление удалено.');
+      await reloadListings({ silent: true });
+      trackListingDelete(listingId);
+    } catch (reason) {
+      const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+      trackError('listing_delete', errorMessage);
+      handleApiError(reason, 'Не удалось удалить объявление.');
+    }
+  };
+
   const uploadPhoto = async (file: File, target: 'profile' | 'listing') => {
     if (!sessionReady) return;
     const setUploading = target === 'profile' ? setCatPhotoUploading : setApartmentPhotoUploading;
@@ -243,7 +312,11 @@ export default function TelegramMiniAppPage() {
         setListingForm((prev) => ({ ...prev, apartmentPhotoId: fileId, apartmentPhotoUrl: url }));
         setStatus('Фото квартиры загружено.');
       }
+      trackPhotoUpload(target, true);
     } catch (reason) {
+      trackPhotoUpload(target, false);
+      const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+      trackError('photo_upload', errorMessage);
       handleApiError(reason, 'Не удалось загрузить фото.');
     } finally {
       setUploading(false);
@@ -265,18 +338,24 @@ export default function TelegramMiniAppPage() {
           catName: response.profile.catName,
           intro: response.profile.intro,
           catPhotoId: response.profile.catPhotoId,
-          catPhotoUrl: response.profile.catPhotoUrl ?? profileForm.catPhotoUrl
+          catPhotoUrl: response.profile.catPhotoUrl ?? profileForm.catPhotoUrl,
+          city: response.profile.city ?? profileForm.city,
+          country: response.profile.country ?? profileForm.country
         });
         setListingForm((prev) => ({
           ...prev,
-          city: response.profile?.city ?? prev.city,
-          country: response.profile?.country ?? prev.country
+          city: response.profile?.city ?? profileForm.city,
+          country: response.profile?.country ?? profileForm.country
         }));
       }
       setProfilePreview(response.preview ?? null);
       setProfileCompleted(response.profileCompleted);
       setStatus('Анкета сохранена.');
+      trackProfileSave(true);
     } catch (reason) {
+      trackProfileSave(false);
+      const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+      trackError('profile_save', errorMessage);
       handleApiError(reason, 'Не удалось сохранить анкету.');
     } finally {
       setProfileLoading(false);
@@ -294,7 +373,11 @@ export default function TelegramMiniAppPage() {
       setProfilePreview(response.preview);
       setStatus('Анкета опубликована в канале!');
       setChannelInviteLink(response.channelInviteLink ?? null);
+      trackProfilePublish(true);
     } catch (reason) {
+      trackProfilePublish(false);
+      const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+      trackError('profile_publish', errorMessage);
       handleApiError(reason, 'Не удалось опубликовать анкету.');
     } finally {
       setProfilePublishing(false);
@@ -303,7 +386,7 @@ export default function TelegramMiniAppPage() {
 
   const previewListingAction = async () => {
     if (!sessionReady || listingDisabled) return;
-    setListingLoading(true);
+    setListingPreviewing(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
@@ -311,16 +394,19 @@ export default function TelegramMiniAppPage() {
       const { preview } = await api.previewListing(buildListingPayload(listingForm));
       setListingPreview(preview);
       setStatus('Предпросмотр объявления обновлён.');
+      trackListingPreview();
     } catch (reason) {
+      const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+      trackError('listing_preview', errorMessage);
       handleApiError(reason, 'Не удалось подготовить объявление.');
     } finally {
-      setListingLoading(false);
+      setListingPreviewing(false);
     }
   };
 
   const publishListingAction = async () => {
     if (!sessionReady || listingDisabled) return;
-    setListingLoading(true);
+    setListingPublishing(true);
     setError(null);
     setStatus(null);
     setChannelInviteLink(null);
@@ -330,11 +416,14 @@ export default function TelegramMiniAppPage() {
         publish: true
       });
       setListingPreview(null);
-      setListingForm((prev) => ({
+      const newForm = {
         ...initialListingForm,
-        city: prev.city,
-        country: prev.country
-      }));
+        city: listingForm.city,
+        country: listingForm.country
+      };
+      setListingForm(newForm);
+      draftStorage.clear();
+      setHasDraft(false);
       setStatus(
         response.published
           ? 'Объявление опубликовано в канале!'
@@ -344,10 +433,14 @@ export default function TelegramMiniAppPage() {
         setChannelInviteLink(response.channelInviteLink);
       }
       await reloadListings({ silent: true });
+      trackListingPublish(true);
     } catch (reason) {
+      trackListingPublish(false);
+      const errorMessage = reason instanceof Error ? reason.message : 'Unknown error';
+      trackError('listing_publish', errorMessage);
       handleApiError(reason, 'Не удалось опубликовать объявление.');
     } finally {
-      setListingLoading(false);
+      setListingPublishing(false);
     }
   };
 
@@ -453,7 +546,21 @@ export default function TelegramMiniAppPage() {
       </section>
 
       <section style={cardStyle}>
-        <h2 style={{ fontSize: 20, marginBottom: 16 }}>Объявление</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 20, margin: 0 }}>Объявление</h2>
+          {hasDraft && profileCompleted && (
+            <span style={{ 
+              fontSize: 12, 
+              color: '#f59e0b', 
+              background: '#fef3c7', 
+              padding: '4px 8px', 
+              borderRadius: 6,
+              fontWeight: 600
+            }}>
+              📝 Черновик сохранён
+            </span>
+          )}
+        </div>
         {!profileCompleted && (
           <div
             style={{
@@ -473,7 +580,8 @@ export default function TelegramMiniAppPage() {
         <ListingForm
           value={listingForm}
           disabled={listingDisabled}
-          loading={listingLoading}
+          isPreviewing={listingPreviewing}
+          isPublishing={listingPublishing}
           uploading={apartmentPhotoUploading}
           onChange={handleListingChange}
           onSelectPhoto={(file) => uploadPhoto(file, 'listing')}
@@ -557,6 +665,23 @@ export default function TelegramMiniAppPage() {
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
                     Обновлено: {formatTimestamp(item.updatedAt)}
                   </div>
+                  <button
+                    type="button"
+                    style={{
+                      marginTop: 8,
+                      padding: '6px 12px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: '#dc2626',
+                      background: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 8,
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => deleteListingAction(item.id)}
+                  >
+                    🗑️ Удалить
+                  </button>
                 </li>
               );
             })}
