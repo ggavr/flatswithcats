@@ -78,5 +78,11 @@ export const listingService = {
 
   async archive(listingId: string, ownerTgId: number) {
     await listingsRepo.archive(listingId, ownerTgId);
+  },
+
+  async update(listingId: string, ownerTgId: number, input: ListingDraftInput) {
+    const draft = await this.buildDraft(ownerTgId, input);
+    const updated = await listingsRepo.update(listingId, { ...draft, ownerTgId });
+    return { listing: updated };
   }
 };

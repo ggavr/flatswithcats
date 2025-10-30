@@ -57,7 +57,8 @@ export const cfg = {
   notion: {
     token: requireEnv('NOTION_TOKEN'),
     dbProfiles: requireEnv('NOTION_DB_PROFILES'),
-    dbListings: requireEnv('NOTION_DB_LISTINGS')
+    dbListings: requireEnv('NOTION_DB_LISTINGS'),
+    dbSubscriptions: process.env.NOTION_DB_SUBSCRIPTIONS || requireEnv('NOTION_DB_PROFILES') // Fallback to profiles DB if not set
   },
   webAppUrl: process.env.WEBAPP_URL?.trim() ?? null,
   media: {

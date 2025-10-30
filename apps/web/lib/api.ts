@@ -147,7 +147,7 @@ const request = async <T>(path: string, init?: RequestInit, options?: { retry?: 
   }
 };
 
-const jsonRequest = async <T>(path: string, body: unknown, method: 'POST' | 'PUT') =>
+const jsonRequest = async <T>(path: string, body: unknown, method: 'POST' | 'PUT' | 'PATCH') =>
   request<T>(
     path,
     {
@@ -185,6 +185,28 @@ export const api = {
 
   fetchListings: () => request<ListingsIndexResponse>('/api/listings'),
 
+  fetchPublicListings: (params?: { city?: string; country?: string; limit?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.city) searchParams.set('city', params.city);
+    if (params?.country) searchParams.set('country', params.country);
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+    const query = searchParams.toString();
+    return request<{ listings: Array<{
+      id: string;
+      name: string;
+      city: string;
+      country: string;
+      catPhotoUrl?: string;
+      apartmentDescription: string;
+      apartmentPhotoUrl?: string;
+      dates: string;
+      conditions: string;
+      preferredDestinations: string;
+      channelMessageId?: number;
+      updatedAt: string;
+    }> }>(`/api/listings/public${query ? `?${query}` : ''}`);
+  },
+
   saveProfile: (payload: SaveProfilePayload) => jsonRequest<ProfileResponse>('/api/profile', payload, 'PUT'),
 
   previewListing: (payload: ListingDraftPayload) =>
@@ -198,6 +220,9 @@ export const api = {
 
   publishProfile: () =>
     request<PublishProfileResponse>('/api/profile/publish', { method: 'POST' }),
+
+  updateListing: (listingId: string, payload: ListingDraftPayload & { publish?: boolean }) =>
+    jsonRequest<CreateListingResponse>(`/api/listings/${listingId}`, payload, 'PATCH'),
 
   deleteListing: (listingId: string) =>
     request<{ success: boolean }>(`/api/listings/${listingId}`, { method: 'DELETE' }),

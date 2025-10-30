@@ -291,5 +291,48 @@ export const listingsRepo = {
     } catch (error) {
       return handleNotionError(error, { id, tgId: ownerTgId, op: 'listings.archive' });
     }
+  },
+
+  async update(id: string, listing: Partial<Listing> & { ownerTgId: number }): Promise<StoredListing> {
+    try {
+      await ensureListingsSchema();
+      
+      const properties: any = {};
+      
+      if (listing.city !== undefined) properties.city = { rich_text: text(listing.city) };
+      if (listing.country !== undefined) properties.country = { rich_text: text(listing.country) };
+      if (listing.apartmentDescription !== undefined) {
+        properties.apartmentDescription = { rich_text: text(listing.apartmentDescription) };
+      }
+      if (listing.apartmentPhotoId !== undefined) {
+        properties.apartmentPhotoIds = { rich_text: text(listing.apartmentPhotoId) };
+      }
+      if (listing.apartmentPhotoUrl !== undefined) {
+        properties.apartmentPhotoUrl = { rich_text: text(listing.apartmentPhotoUrl) };
+      }
+      if (listing.dates !== undefined) properties.dates = { rich_text: text(listing.dates) };
+      if (listing.conditions !== undefined) properties.conditions = { rich_text: text(listing.conditions) };
+      if (listing.preferredDestinations !== undefined) {
+        properties.preferredDestinations = { rich_text: text(listing.preferredDestinations) };
+      }
+      
+      const updated = await withNotionRetry(
+        async () => {
+          const page = await notion.pages.update({
+            page_id: id,
+            properties
+          } as any);
+          return toListing(page as NotionPage);
+        },
+        { id, tgId: listing.ownerTgId, op: 'listings.update' }
+      );
+      
+      listingByIdCache.delete(id);
+      listingsByOwnerCache.delete(listing.ownerTgId);
+      
+      return updated;
+    } catch (error) {
+      return handleNotionError(error, { id, tgId: listing.ownerTgId, op: 'listings.update' });
+    }
   }
 };

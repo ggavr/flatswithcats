@@ -90,6 +90,7 @@ export default function TelegramMiniAppPage() {
   const [userListings, setUserListings] = useState<ListingsIndexItem[]>([]);
   const [listingsLoading, setListingsLoading] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
+  const [editingListingId, setEditingListingId] = useState<string | null>(null);
 
   const handleApiError = (reason: unknown, fallback: string) => {
     if (reason instanceof ApiError && (reason.status === 401 || reason.status === 403)) {
@@ -411,10 +412,29 @@ export default function TelegramMiniAppPage() {
     setStatus(null);
     setChannelInviteLink(null);
     try {
-      const response = await api.createListing({
-        ...buildListingPayload(listingForm),
-        publish: true
-      });
+      let response;
+      
+      if (editingListingId) {
+        // Update existing listing
+        response = await api.updateListing(editingListingId, {
+          ...buildListingPayload(listingForm),
+          publish: true
+        });
+        setStatus('Объявление обновлено!');
+        setEditingListingId(null);
+      } else {
+        // Create new listing
+        response = await api.createListing({
+          ...buildListingPayload(listingForm),
+          publish: true
+        });
+        setStatus(
+          response.published
+            ? 'Объявление опубликовано в канале!'
+            : 'Черновик объявления сохранён.'
+        );
+      }
+      
       setListingPreview(null);
       const newForm = {
         ...initialListingForm,
@@ -424,11 +444,7 @@ export default function TelegramMiniAppPage() {
       setListingForm(newForm);
       draftStorage.clear();
       setHasDraft(false);
-      setStatus(
-        response.published
-          ? 'Объявление опубликовано в канале!'
-          : 'Черновик объявления сохранён.'
-      );
+      
       if (response.channelInviteLink) {
         setChannelInviteLink(response.channelInviteLink);
       }
@@ -444,10 +460,53 @@ export default function TelegramMiniAppPage() {
     }
   };
 
+  const loadListingForEdit = (listing: ListingsIndexItem) => {
+    setEditingListingId(listing.id);
+    setListingForm({
+      city: listing.city,
+      country: listing.country,
+      apartmentDescription: listing.apartmentDescription,
+      apartmentPhotoId: listing.apartmentPhotoId,
+      apartmentPhotoUrl: listing.apartmentPhotoUrl ?? '',
+      dates: listing.dates,
+      conditions: listing.conditions,
+      preferredDestinations: listing.preferredDestinations
+    });
+    setListingPreview(null);
+    setStatus('Редактируешь существующее объявление. Внеси изменения и опубликуй.');
+    
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingListingId(null);
+    setListingForm({
+      ...initialListingForm,
+      city: profileForm.city,
+      country: profileForm.country
+    });
+    setListingPreview(null);
+    setStatus(null);
+  };
+
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: '48px 24px 120px', lineHeight: 1.6 }}>
       <header style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 32, marginBottom: 12, color: '#1f2933' }}>Cats & Flats · Мини‑эпп</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h1 style={{ fontSize: 32, margin: 0, color: '#1f2933' }}>Cats & Flats · Мини‑эпп</h1>
+          <a
+            href="/search"
+            style={{
+              fontSize: 14,
+              color: '#2563eb',
+              textDecoration: 'none',
+              fontWeight: 600
+            }}
+          >
+            🔍 Поиск жилья →
+          </a>
+        </div>
         {helperText && <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>{helperText}</p>}
       </header>
 
@@ -547,19 +606,41 @@ export default function TelegramMiniAppPage() {
 
       <section style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 20, margin: 0 }}>Объявление</h2>
-          {hasDraft && profileCompleted && (
-            <span style={{ 
-              fontSize: 12, 
-              color: '#f59e0b', 
-              background: '#fef3c7', 
-              padding: '4px 8px', 
-              borderRadius: 6,
-              fontWeight: 600
-            }}>
-              📝 Черновик сохранён
-            </span>
-          )}
+          <h2 style={{ fontSize: 20, margin: 0 }}>
+            {editingListingId ? '✏️ Редактирование объявления' : 'Объявление'}
+          </h2>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {editingListingId && (
+              <button
+                type="button"
+                style={{
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #e5e7eb',
+                  background: '#f9fafb',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+                onClick={cancelEdit}
+              >
+                Отменить
+              </button>
+            )}
+            {hasDraft && profileCompleted && !editingListingId && (
+              <span style={{ 
+                fontSize: 12, 
+                color: '#f59e0b', 
+                background: '#fef3c7', 
+                padding: '4px 8px', 
+                borderRadius: 6,
+                fontWeight: 600
+              }}>
+                📝 Черновик сохранён
+              </span>
+            )}
+          </div>
         </div>
         {!profileCompleted && (
           <div
@@ -665,23 +746,40 @@ export default function TelegramMiniAppPage() {
                   <div style={{ fontSize: 12, color: '#94a3b8' }}>
                     Обновлено: {formatTimestamp(item.updatedAt)}
                   </div>
-                  <button
-                    type="button"
-                    style={{
-                      marginTop: 8,
-                      padding: '6px 12px',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: '#dc2626',
-                      background: '#fee2e2',
-                      border: '1px solid #fecaca',
-                      borderRadius: 8,
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => deleteListingAction(item.id)}
-                  >
-                    🗑️ Удалить
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: '#2563eb',
+                        background: '#dbeafe',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 8,
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => loadListingForEdit(item)}
+                    >
+                      ✏️ Редактировать
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: '#dc2626',
+                        background: '#fee2e2',
+                        border: '1px solid #fecaca',
+                        borderRadius: 8,
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => deleteListingAction(item.id)}
+                    >
+                      🗑️ Удалить
+                    </button>
+                  </div>
                 </li>
               );
             })}

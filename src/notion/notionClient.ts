@@ -25,7 +25,8 @@ const fetchWithTimeout: typeof fetch = async (input, init = {}) => {
 export const notion = new Client({ auth: cfg.notion.token, fetch: fetchWithTimeout as any });
 export const DB = {
   profiles: cfg.notion.dbProfiles,
-  listings: cfg.notion.dbListings
+  listings: cfg.notion.dbListings,
+  subscriptions: cfg.notion.dbSubscriptions
 };
 
 const extractRetryAfter = (error: APIResponseError): number | undefined => {

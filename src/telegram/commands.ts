@@ -6,6 +6,7 @@ import { templates } from '../domain/templates';
 import { cfg } from '../core/config';
 import type { Profile } from '../core/types';
 import { listingService } from '../services/listing.service';
+import { subscriptionsService } from '../services/subscriptions.service';
 
 interface BotContext extends Context {
   state: {
@@ -69,6 +70,43 @@ const sendSupport = async (ctx: Context) => {
   await ctx.reply(lines.join('\n'));
 };
 
+const sendNotificationsInfo = async (ctx: Context) => {
+  const tgId = ctx.from?.id;
+  if (!tgId) return;
+
+  try {
+    const subscription = await subscriptionsService.get(tgId);
+    
+    if (!subscription || !subscription.enabled) {
+      await ctx.reply(
+        '🔔 Уведомления выключены\n\n' +
+        'Хочешь получать уведомления о новых объявлениях, которые могут тебе подойти?\n\n' +
+        'Настрой уведомления в мини-эппе или используй команду /subscribe',
+        Markup.inlineKeyboard([
+          [Markup.button.webApp('⚙️ Настроить в мини-эппе', `${cfg.webAppUrl}/settings` || '#')]
+        ])
+      );
+      return;
+    }
+
+    const cities = subscription.cities || 'не указаны';
+    const countries = subscription.countries || 'не указаны';
+    
+    await ctx.reply(
+      '🔔 Уведомления включены\n\n' +
+      `Города: ${cities}\n` +
+      `Страны: ${countries}\n\n` +
+      'Ты будешь получать уведомления о новых объявлениях из этих локаций.\n\n' +
+      'Используй /unsubscribe чтобы отключить',
+      Markup.inlineKeyboard([
+        [Markup.button.webApp('⚙️ Изменить настройки', `${cfg.webAppUrl}/settings` || '#')]
+      ])
+    );
+  } catch (error) {
+    await ctx.reply('Не удалось загрузить настройки уведомлений.');
+  }
+};
+
 const sendSearchResults = async (ctx: Context) => {
   const query = ctx.message && 'text' in ctx.message ? ctx.message.text.replace('/search', '').trim() : '';
   
@@ -127,6 +165,27 @@ export const registerCommands = (bot: Telegraf<Context>) => {
   bot.command('menu', async (ctx) => sendMainMenu(ctx, 'Главное меню'));
   bot.command('status', sendProfileStatus);
   bot.command('search', sendSearchResults);
+  bot.command('notifications', sendNotificationsInfo);
+  bot.command('subscribe', async (ctx) => {
+    const tgId = ctx.from?.id;
+    if (!tgId) return;
+    
+    await subscriptionsService.enable(tgId);
+    await ctx.reply(
+      '✅ Уведомления включены!\n\n' +
+      'Настрой города и страны в мини-эппе, чтобы получать релевантные объявления.',
+      Markup.inlineKeyboard([
+        [Markup.button.webApp('⚙️ Настроить', `${cfg.webAppUrl}/settings` || '#')]
+      ])
+    );
+  });
+  bot.command('unsubscribe', async (ctx) => {
+    const tgId = ctx.from?.id;
+    if (!tgId) return;
+    
+    await subscriptionsService.disable(tgId);
+    await ctx.reply('🔕 Уведомления отключены. Используй /subscribe чтобы включить снова.');
+  });
 
   bot.hears('Главное меню', async (ctx) => sendMainMenu(ctx, 'Главное меню'));
   bot.hears('ℹ️ Как начать', async (ctx) => {
