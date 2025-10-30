@@ -1,0 +1,69 @@
+# Cursor Rules для проекта Cats & Flats
+
+## Автоматический коммит и пуш
+
+Для автоматического коммита и пуша изменений используйте:
+
+```bash
+# Через npm (рекомендуется)
+npm run commit "feat: add new functionality"
+
+# Или через терминал
+node scripts/auto-commit.js "fix: resolve bug"
+```
+
+## Структура проекта
+
+- `src/` - Backend (Node.js, Fastify, TypeScript)
+- `apps/web/` - Frontend (Next.js, React, TypeScript)
+- `src/telegram/` - Telegram бот и мини-приложение
+- `src/api/` - REST API эндпоинты
+- `src/services/` - Бизнес-логика
+- `src/notion/` - Интеграция с Notion
+- `scripts/` - Автоматизация и утилиты
+
+## Соглашения по коммитам
+
+Используйте conventional commits:
+
+- `feat:` - новая функциональность
+- `fix:` - исправление багов
+- `docs:` - документация
+- `style:` - форматирование кода
+- `refactor:` - рефакторинг
+- `test:` - тесты
+- `chore:` - обслуживание
+
+## Запуск проекта
+
+```bash
+# Backend + Bot
+npm run dev
+
+# Frontend
+npm run dev:web
+
+# Сборка
+npm run build
+npm run build:web
+```
+
+## Полезные команды Cursor
+
+- `Ctrl+Shift+P` → "Git: Commit" - интерактивный коммит
+- `Ctrl+Shift+P` → "Terminal: Run Task" - запуск задач
+- `Ctrl+Shift+P` → "Tasks: Run Task" → "Git: Auto Commit & Push"
+
+## Аутентификация GitHub
+
+Для пуша в GitHub настройте Personal Access Token:
+
+1. GitHub → Settings → Developer settings → Personal access tokens
+2. Создайте token с scope `repo`
+3. Используйте его как пароль при первом пуше
+
+Или настройте SSH:
+```bash
+git remote set-url origin git@github.com:ggavr/flatswithcats.git
+ssh-add ~/.ssh/id_rsa
+```
