@@ -15,7 +15,9 @@
     "test": "ts-node --transpile-only tests/smoke.ts",
     "dev:web": "npm --prefix apps/web run dev",
     "build:web": "npm --prefix apps/web run build",
-    "start:web": "npm --prefix apps/web run start"
+    "start:web": "npm --prefix apps/web run start",
+    "commit": "node scripts/auto-commit.js",
+    "commit:push": "node scripts/auto-commit.js"
   },
   "dependencies": {
     "@fastify/cors": "^8.4.2",
